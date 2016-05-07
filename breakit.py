@@ -42,6 +42,10 @@ class break_it(engine):
     self.LOG_DIR = os.path.abspath("./JOBS/LOGS")
     
     self.JOB_ID = {}
+    self.JOB_ID_FILE = "%s/job_ids.pickle" % self.LOG_DIR
+    self.STATS_ID_FILE = "%s/stats_ids.pickle" % self.LOG_DIR
+        
+
     self.MY_EXEC = sys.argv[0]
     self.MY_EXEC_SAVED = self.SAVE_DIR+"/"+os.path.basename(sys.argv[0])
     self.INITIAL_DATA_DIR = "."
@@ -63,6 +67,8 @@ class break_it(engine):
       self.env_init()
       self.prepare_computation()
       job = self.job_submit(1,self.TO)
+      self.log_debug("Saving Job Ids...",1)
+      pickle.dump( self.JOB_ID, open(self.JOB_ID_FILE, "wb" ) )
     else:
       print "continuing..."
 
@@ -155,6 +161,97 @@ class break_it(engine):
         self.log_debug("creating directory %s" % d,1)
 
         
+  #########################################################################
+  # get current job status
+  #########################################################################
+  def get_current_jobs_status(self):
+
+    self.log_debug("getting  current status of all jobs",1)
+
+    existing_jobs = {}
+    completed_jobs = {}
+
+    if not(os.path.exists(self.JOB_ID_FILE)):
+      self.log_debug("No Job information available... Cannot kill anything...",1)
+      return existing_jobs
+
+    self.JOB_ID = pickle.load( open( self.JOB_ID_FILE, "rb" ) )
+
+
+    if self.DRY_RUN:
+      return existing_jobs
+
+    my_username = getpass.getuser()
+    my_jobs = []
+    for k in self.JOB_ID.keys():
+      my_jobs = my_jobs + [self.JOB_ID[k]]
+    self.log_debug("checking on exiting jobs for user %s : > %s < " % (my_username," ".join(my_jobs)),2)
+    
+    cmd = [self.SCHED_Q,"-l","-u",my_username]
+
+    output = subprocess.check_output(cmd)
+    for l in output.split("\n"):
+      self.log_debug(l,2)
+      if l.find(my_username)>-1:
+        l = re.sub(r'^\s+', "",l)
+        l = re.sub(r'\s+', " ",l)
+        f = l.split(" ")
+        if self.PBS:
+          fj = f[0].split(".")
+        else:
+          fj = f[0].split("_")
+        job_id = fj[0]
+        if len(fj)>1:
+          job_range = fj[1]
+        else:
+          job_range=""
+        if self.PBS:
+          job_status = f[-3]
+        else:
+          job_status = f[4]
+        if job_id in my_jobs:
+          existing_jobs[job_id] = job_status
+          self.log_debug("job %s %s %s " % (job_id,job_status,job_range),1)
+
+    for job_id in self.JOB_ID.keys():
+      if not(job_id in existing_jobs.keys()):
+        completed_jobs[job_id] = 'COMPLETED'
+        self.log_debug("job %s %s %s" %(job_id,"COMPLETED","??"))
+
+    return existing_jobs
+
+  #########################################################################
+  # kill jobs... after asking confirmation
+  #########################################################################
+  def kill_jobs(self,force=False):
+
+    self.log_debug("killing all jobs",1)
+
+    self.initialize_scheduler()
+
+    existing_jobs = self.get_current_jobs_status()
+
+    if len(existing_jobs):
+      if force:
+        self.log_debug("killed forced... not asking confirmation...")
+      else:
+        input_var = raw_input("Do you really want to kill all running jobs ? (yes/no) ")
+    
+        if not(input_var == "yes"):
+          self.error_report("No clear confirmation... giving up!")
+    
+      for j in existing_jobs.keys():
+        self.log_debug("killing job %s -> ?? " % (j),1)
+        self.log_debug("   with command : /%s %s/ " % (self.SCHED_KIL,j),2)
+        output = subprocess.Popen([self.SCHED_KIL,j],\
+                                  stdout=subprocess.PIPE).communicate()[0].split("\n")
+
+      self.log.info("All jobs killed with success")
+      self.log.info("="*60)
+      print("All jobs killed with success")
+      #self.send_mail("All job have been killed with success")
+    else:
+      self.log.info("No job still exists for this study...")
 
   #########################################################################
   # submit a job_array
@@ -428,7 +525,8 @@ class break_it(engine):
       for option, argument in opts:
         if option in ("--log-dir"):
           self.LOG_DIR = expanduser(argument)
-
+          self.JOB_ID_FILE = "%s/job_ids.pickle" % self.LOG_DIR
+          
       # initialize Logs
       self.initialize_log_files()
 
@@ -452,6 +550,7 @@ class break_it(engine):
           self.SCRATCH = 1
         elif option in ("--kill"):
           self.KILL = 1
+          self.kill_jobs()
         elif option in ("--continue"):
           self.CONTINUE = 1
         elif option in ("--job"):
