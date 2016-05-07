@@ -204,7 +204,7 @@ class break_it(engine):
 
     job_template = self.create_job_template()
 
-    job_name = "%d-%d" % (array_first,array_last)
+    job_name = "%d-%d-%%K" % (array_first,array_last)
     # job_dir = "%s/%03d" %  (self.JOB_DIR,n)
     # if os.path.exists(job_dir) and not (n+1 in self.JOBS_TO_RELAUNCH.keys()):
     #   self.error_report("Something is going weird...\ndirectory %s allready exists..." % job_dir)
@@ -261,14 +261,14 @@ class break_it(engine):
         nb_header_lines = nb_header_lines - 1
         if (nb_header_lines) == 0:
 
-          finalize_cmd = "python -u ../../SAVE/%s.py --task=$task_id --finalize --log-dir=%s" % \
-                         (self.APP_NAME,self.LOG_DIR)
+          finalize_cmd = "python -u ../../SAVE/%s.py --task=$task_id --finalize --log-dir=%s --range=%s" % \
+                         (self.APP_NAME,self.LOG_DIR,self.RANGE)
 
           job = job + self.job_header_amend()
           job = job + "mkdir -p %s/$task_id\n\n" % self.JOB_DIR
           job = job + "cd %s/$task_id \n\n" % self.JOB_DIR
-          job = job + "python -u ../../SAVE/%s.py --task=$task_id --continue --log-dir=%s" % \
-              (self.APP_NAME,self.LOG_DIR)
+          job = job + "python -u ../../SAVE/%s.py --task=$task_id --continue --log-dir=%s --range=%s" % \
+              (self.APP_NAME,self.LOG_DIR,self.RANGE)
 
           if self.FAKE:
             job = job + " --fake"
