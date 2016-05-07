@@ -166,8 +166,8 @@ class break_it(engine):
           finalize_cmd = "python -u ../../../SAVE/%s.py --finalize --self.log-dir=../../../LOGS" %           self.APP_NAME
 
           job = job + self.job_header_amend()
-          job = job + "mkdir -p "+self.JOB_DIR__+"/$task_id\n\n"
-          job = job + "cd %s/$task_id \n\n" % __self.JOB_DIR__
+          job = job + "mkdir -p %s/$task_id\n\n" % self.JOB_DIR
+          job = job + "cd %s/$task_id \n\n" % self.JOB_DIR
           job = job + "python -u ../../../SAVE/%s.py --feeds --self.log-dir=../../../LOGS" % \
               self.APP_NAME
 
