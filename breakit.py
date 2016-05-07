@@ -16,6 +16,8 @@ import datetime
 import string
 import shutil
 import getpass
+from os.path import expanduser
+import glob
 
 from pysam import engine
 from env import *
@@ -37,6 +39,9 @@ class break_it(engine):
     
     self.JOB_DIR = os.path.abspath("./JOBS/RESULTS")
     self.SAVE_DIR = os.path.abspath("./JOBS/SAVE")
+    self.LOG_DIR = os.path.abspath("./JOBS/LOGS")
+    
+    self.JOB_ID = {}
     self.MY_EXEC = sys.argv[0]
     self.MY_EXEC_SAVED = self.SAVE_DIR+"/"+os.path.basename(sys.argv[0])
     self.INITIAL_DATA_DIR = "."
@@ -44,7 +49,7 @@ class break_it(engine):
     if os.path.exists(self.WORKSPACE_FILE):
       self.load_workspace()
 
-    engine.__init__(self,self.APP_NAME,self.VERSION,"/scratch/%s/logs/" % getpass.getuser())
+    engine.__init__(self,self.APP_NAME,self.VERSION,self.LOG_DIR)
 
     self.run()
       
@@ -54,10 +59,39 @@ class break_it(engine):
   def run(self):
     #
     self.initialize_scheduler()
-    self.prepare_computation()
-    job = self.create_job_template()
-    print job
-      
+    self.env_init()
+    if not(self.CONTINUE):
+      self.prepare_computation()
+      job = self.job_submit(1,5)
+
+
+
+  #########################################################################
+  # initialize job environment
+  #########################################################################
+
+  def env_init(self):
+
+    self.log_debug('initialize environment ')
+
+    if self.CONTINUE:
+      return
+    
+    for d in [self.SAVE_DIR,self.LOG_DIR]:
+      if not(os.path.exists(d)):
+        os.makedirs(d)
+        self.log_debug("creating directory "+d,1)
+    
+    for f in glob.glob("*.py"):
+      self.log_debug("copying file %s into SAVE directory " % f,1)
+      os.system("cp ./%s  %s" % (f,self.SAVE_DIR))
+
+    # for f in self.FILES_TO_COPY:
+    #   os.system("cp %s/%s %s/" % (self.INITIAL_DATA_DIR,f,self.JOB_DIR_0))
+
+    self.log_info('environment initialized successfully')
+    
+
   #########################################################################
   # initialize_scheduler
   #########################################################################
@@ -79,22 +113,6 @@ class break_it(engine):
       self.SCHED_KIL = "scancel"
       self.SCHED_Q = "squeue"
       self.SCHED_DEP = "--dependency=afterany"
-
-
-  def job_header_amend(self):
-    job = ""
-    #job = job + "__SCHEDULER_DEPENDENCY__\n"
-    if self.PBS:
-      job = job + self.SCHED_TAG+" -o %s/__JOB_NAME__.out\n" % self.SAVE_DIR
-      job = job + self.SCHED_TAG+" -e %s/__JOB_NAME__.err\n" % self.SAVE_DIR
-      job = job + self.SCHED_TAG+" -N __JOB_NAME__\n"
-      job = job + """\ntask_id=`printf "%03d" "$PBS_ARRAYID"`\n"""
-    else:
-      job = job + self.SCHED_TAG+" -o %s/__JOB_NAME__.out-%%a\n" % self.SAVE_DIR
-      job = job + self.SCHED_TAG+" -e %s/__JOB_NAME__.err-%%a\n" % self.SAVE_DIR
-      job = job + self.SCHED_TAG+" --job-name=__JOB_NAME__\n"
-      job = job + """\ntask_id=`printf "%03d" "$SLURM_ARRAY_TASK_ID"`\n"""
-    return job
 
 
   #########################################################################
@@ -136,6 +154,84 @@ class break_it(engine):
 
         
 
+  #########################################################################
+  # submit a job_array
+  #########################################################################
+
+  def job_array_submit(self,job_name, job_file, array_first, array_last, dep=""):
+
+    cmd = [self.SCHED_SUB]
+    if self.NODES_FAILED:
+      cmd = cmd + ["-x",self.NODES_FAILED]
+
+    cmd = cmd + [self.SCHED_ARR,"%d-%d" % (array_first,array_last),job_file ]
+
+    self.log_debug("submitting : "+" ".join(cmd))
+
+    if not self.DRY_RUN:
+      output = subprocess.check_output(cmd)
+      if self.PBS:
+        #print output.split("\n")
+        job_id = output.split("\n")[0].split(".")[0]
+        #print job_id
+      else:
+        for l in output.split("\n"):
+          self.log_debug(l,1)
+          #print l.split(" ")
+          if "Submitted batch job" in l:
+            job_id = l.split(" ")[-1]
+      self.log_debug("job submitted : %s depends on %s" % (job_id,dep),1)
+    else: 
+      self.log_debug("should submit job %s" % job_name,1)
+      self.log_debug(" with cmd = %s " % " ".join(cmd),1)
+      job_id = "self.JOB_ID_%s" % job_name
+
+    self.JOB_ID[job_name] =  job_id
+
+    print 'submitting job %s Job # %s_%s-%s' % (job_name,job_id,array_first,array_last)
+
+    return job_id
+
+  #########################################################################
+  # submit a job
+  #########################################################################
+
+  def job_submit(self,array_first,array_last):
+
+    self.log_debug('submitting job array [%s,%s]...' % (array_first,array_last),1) 
+
+    job_template = self.create_job_template()
+
+    job_name = "%d-%d" % (array_first,array_last)
+    # job_dir = "%s/%03d" %  (self.JOB_DIR,n)
+    # if os.path.exists(job_dir) and not (n+1 in self.JOBS_TO_RELAUNCH.keys()):
+    #   self.error_report("Something is going weird...\ndirectory %s allready exists..." % job_dir)
+
+    dep =  ""
+    # job_name_dependent = "%03d" % (n+1)
+    # if job_name_dependent in self.JOB_ID.keys():
+    #   dep = dep + ":" + self.JOB_ID[job_name_dependent]
+    # if (dep) :
+    #   job_content = job_template.replace("__SCHEDULER_DEPENDENCY__",\
+    #                                        self.SCHED_TAG+" "+self.SCHED_DEP+dep)
+    # else:
+    #   job_content = job_template.replace("__SCHEDULER_DEPENDENCY__","")
+    job_content = job_template.replace("__SCHEDULER_DEPENDENCY__","")
+    job_content = job_content.replace("__JOB_NAME__",job_name)
+    job_content = job_content.replace("__self.JOB_DIR__",self.JOB_DIR)
+
+            
+    job_file = '%s/%s.job' % (self.SAVE_DIR,job_name)
+    f=open(job_file,'w')
+    f.write(job_content)
+    f.close()
+
+    job_id=self.job_array_submit(job_name,job_file,array_first,array_last,dep)
+
+    self.log_debug('submitted job array [%s,%s] successfully...' % (array_first,array_last),1) 
+
+
+
   #######################################################################
   # create a job template
   #########################################################################
@@ -163,13 +259,14 @@ class break_it(engine):
         nb_header_lines = nb_header_lines - 1
         if (nb_header_lines) == 0:
 
-          finalize_cmd = "python -u ../../../SAVE/%s.py --finalize --self.log-dir=../../../LOGS" %           self.APP_NAME
+          finalize_cmd = "python -u ../../SAVE/%s.py --task=$task_id --finalize --log-dir=%s" % \
+                         (self.APP_NAME,self.LOG_DIR)
 
           job = job + self.job_header_amend()
           job = job + "mkdir -p %s/$task_id\n\n" % self.JOB_DIR
           job = job + "cd %s/$task_id \n\n" % self.JOB_DIR
-          job = job + "python -u ../../../SAVE/%s.py --feeds --self.log-dir=../../../LOGS" % \
-              self.APP_NAME
+          job = job + "python -u ../../SAVE/%s.py --task=$task_id --continue --log-dir=%s" % \
+              (self.APP_NAME,self.LOG_DIR)
 
           if self.FAKE:
             job = job + " --fake"
@@ -202,6 +299,25 @@ class break_it(engine):
     self.log_debug(job,3)
 
     return job
+
+  #########################################################################
+  # job_header_amend
+  #########################################################################
+  def job_header_amend(self):
+    job = ""
+    #job = job + "__SCHEDULER_DEPENDENCY__\n"
+    if self.PBS:
+      job = job + self.SCHED_TAG+" -o %s/__JOB_NAME__.out\n" % self.SAVE_DIR
+      job = job + self.SCHED_TAG+" -e %s/__JOB_NAME__.err\n" % self.SAVE_DIR
+      job = job + self.SCHED_TAG+" -N __JOB_NAME__\n"
+      job = job + """\ntask_id=`printf "%03d" "$PBS_ARRAYID"`\n"""
+    else:
+      job = job + self.SCHED_TAG+" -o %s/__JOB_NAME__.out-%%a\n" % self.SAVE_DIR
+      job = job + self.SCHED_TAG+" -e %s/__JOB_NAME__.err-%%a\n" % self.SAVE_DIR
+      job = job + self.SCHED_TAG+" --job-name=__JOB_NAME__\n"
+      job = job + """\ntask_id=`printf "%03d" "$SLURM_ARRAY_TASK_ID"`\n"""
+    return job
+
 
   #########################################################################
   # check_env
@@ -265,6 +381,7 @@ class break_it(engine):
         print "\n  usage: \n \t python  %s.py \
                \n\t\t[ --help ] \
                \n\t\t[ --job=<job_script file> ] \
+               \n\t\t[ --exclude_nodes=<nodes where not to run> ] \
                \n\t\t[ --restart | --scratch | --kill ]\
                \n\t\t[ --debug ] [ --debug-level=[0|1|2]  ] [ --fake ]  \
              \n"   % self.APP_NAME
@@ -285,17 +402,21 @@ class break_it(engine):
       self.FAKE = None
       self.JOB = None
       self.PBS = None
-      self.SCRATCH = self.KILL = self.RESTART = None
-      
+      self.DRY_RUN = False
+      self.TASK = -1
+
+      self.SCRATCH = self.KILL = self.RESTART = self.CONTINUE = None
+      self.NODES_FAILED = None      
       try:
           if " --help" in " "+" ".join(args) or " -h " in (" "+" ".join(args)+" ") :
             self.error_report("")
 
           opts, args = getopt.getopt(args, "h", 
-                            ["help", "job=", \
-                               "restart", "scratch", "kill", \
-                               "debug", "debug-level=",  \
-                               "fake" ])    
+                            ["help", "job=", "exclude_nodes=","dry",\
+                             "restart", "scratch", "kill", "continue", \
+                             "log-dir=","task=", \
+                             "debug", "debug-level=",  \
+                             "fake" ])    
       except getopt.GetoptError, err:
           # print help information and exit:
           self.usage(err)
@@ -327,16 +448,26 @@ class break_it(engine):
           self.SCRATCH = 1
         elif option in ("--kill"):
           self.KILL = 1
+        elif option in ("--continue"):
+          self.CONTINUE = 1
+          print "continuing..."
+          sys.exit(0)
         elif option in ("--job"):
           self.JOB = argument
+        elif option in ("--exclude_nodes"):
+          self.NODES_FAILED = argument
         elif option in ("--fake"):
-          self.DEBUG = True
           self.FAKE = True
-        elif option in ("--clean"):
-           self.CLEAN = True
+        elif option in ("--dry"):
+           self.DRY_RUN = True
+        elif option in ("--task"):
+          self.TASK = argument
+          
 
       if not(self.JOB):
         self.error_report(message='please set a job to launch')
+
+      self.log_info('starting Task %s' % self.TASK)
 
       return True
 
