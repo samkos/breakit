@@ -551,6 +551,7 @@ class break_it(engine):
         elif option in ("--kill"):
           self.KILL = 1
           self.kill_jobs()
+          sys.exit(0)
         elif option in ("--continue"):
           self.CONTINUE = 1
         elif option in ("--job"):
