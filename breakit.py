@@ -62,7 +62,7 @@ class break_it(engine):
     if not(self.CONTINUE):
       self.env_init()
       self.prepare_computation()
-      job = self.job_submit(1,5)
+      job = self.job_submit(1,self.TO)
     else:
       print "continuing..."
 
@@ -381,8 +381,8 @@ class break_it(engine):
           print "\tappend -h for the list of available options..."
       else:
         print "\n  usage: \n \t python  %s.py \
+               \n\t\t  --job=<job_script file> --range=<array first index>,<array last index> \
                \n\t\t[ --help ] \
-               \n\t\t[ --job=<job_script file> ] \
                \n\t\t[ --exclude_nodes=<nodes where not to run> ] \
                \n\t\t[ --restart | --scratch | --kill ]\
                \n\t\t[ --debug ] [ --debug-level=[0|1|2]  ] [ --fake ]  \
@@ -405,6 +405,7 @@ class break_it(engine):
       self.JOB = None
       self.PBS = None
       self.DRY_RUN = False
+      self.RANGE = False
       self.TASK = -1
 
       self.SCRATCH = self.KILL = self.RESTART = self.CONTINUE = None
@@ -414,7 +415,8 @@ class break_it(engine):
             self.error_report("")
 
           opts, args = getopt.getopt(args, "h", 
-                            ["help", "job=", "exclude_nodes=","dry",\
+                            ["help", "job=", "range=", \
+                             "exclude_nodes=","dry",\
                              "restart", "scratch", "kill", "continue", \
                              "log-dir=","task=", \
                              "debug", "debug-level=",  \
@@ -454,6 +456,9 @@ class break_it(engine):
           self.CONTINUE = 1
         elif option in ("--job"):
           self.JOB = argument
+        elif option in ("--range"):
+          self.RANGE = argument
+          self.TO = int(self.RANGE)
         elif option in ("--exclude_nodes"):
           self.NODES_FAILED = argument
         elif option in ("--fake"):
@@ -465,7 +470,10 @@ class break_it(engine):
           
 
       if not(self.JOB) and not(self.CONTINUE):
-        self.error_report(message='please set a job to launch')
+        self.error_report(message='please set a job to launch with the option --job=<job8file>')
+
+      if not(self.RANGE) and not(self.CONTINUE):
+        self.error_report(message='please set a range for your job with the option --range=<array first index>,<array last index>')
 
       self.log_info('starting Task %s' % self.TASK)
 
