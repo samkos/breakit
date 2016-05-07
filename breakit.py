@@ -59,10 +59,12 @@ class break_it(engine):
   def run(self):
     #
     self.initialize_scheduler()
-    self.env_init()
     if not(self.CONTINUE):
+      self.env_init()
       self.prepare_computation()
       job = self.job_submit(1,5)
+    else:
+      print "continuing..."
 
 
 
@@ -123,7 +125,7 @@ class break_it(engine):
 
     self.log.info("")
     self.log.info("="*60)
-    self.log.info("Setting environment...")
+    self.log.info("preparing computation...")
 
     self.log_debug("======== STARTING BREAKIT ==========")
     self.log_debug("now : "+getDate())
@@ -450,8 +452,6 @@ class break_it(engine):
           self.KILL = 1
         elif option in ("--continue"):
           self.CONTINUE = 1
-          print "continuing..."
-          sys.exit(0)
         elif option in ("--job"):
           self.JOB = argument
         elif option in ("--exclude_nodes"):
@@ -464,7 +464,7 @@ class break_it(engine):
           self.TASK = argument
           
 
-      if not(self.JOB):
+      if not(self.JOB) and not(self.CONTINUE):
         self.error_report(message='please set a job to launch')
 
       self.log_info('starting Task %s' % self.TASK)
