@@ -36,6 +36,8 @@ class break_it(engine):
     self.ALL = True
     self.APP_NAME  = "breakit"
     self.VERSION = "0.1"
+    self.PYSAM_VERSION_REQUIRED = 0.8
+      
     
     self.JOB_DIR = os.path.abspath("./JOBS/RESULTS")
     self.SAVE_DIR = os.path.abspath("./JOBS/SAVE")
@@ -43,6 +45,7 @@ class break_it(engine):
     
     self.JOB_ID = {}
     self.JOB_ID_FILE = "%s/job_ids.pickle" % self.LOG_DIR
+    self.LOCK_FILE = "%s/lock" % self.LOG_DIR
     self.STATS_ID_FILE = "%s/stats_ids.pickle" % self.LOG_DIR
         
 
@@ -53,7 +56,7 @@ class break_it(engine):
     if os.path.exists(self.WORKSPACE_FILE):
       self.load_workspace()
 
-    engine.__init__(self,self.APP_NAME,self.VERSION,self.LOG_DIR)
+    engine.__init__(self,self.APP_NAME,self.VERSION,self.LOG_DIR,self.PYSAM_VERSION_REQUIRED)
 
     self.run()
       
@@ -77,7 +80,10 @@ class break_it(engine):
   #########################################################################
   def manage_jobs(self):
     #
-    print "continuing..."
+    print "continuing... taking lock"
+    lock_file = self.take_lock(self.LOCK_FILE)
+    print "got lock!"
+    
     jobs = self.get_current_jobs_status()
     print jobs
     max=0
@@ -109,7 +115,10 @@ class break_it(engine):
         self.job_array_submit("xxx", self.JOB_FILE_PATH, max+1, self.TO)
         pickle.dump( self.JOB_ID, open(self.JOB_ID_FILE, "wb" ) )
 
-
+    time.sleep(2)
+    self.release_lock(lock_file)
+    print 'lock released'
+    
   #########################################################################
   # initialize job environment
   #########################################################################
@@ -172,7 +181,6 @@ class break_it(engine):
     self.log_debug("======== STARTING BREAKIT ==========")
     self.log_debug("now : "+getDate())
 
-    self.check_python_version()
 
     if (os.path.exists(self.JOB_DIR)):
       if not(self.SCRATCH or self.RESTART or self.KILL): 
@@ -510,6 +518,8 @@ class break_it(engine):
         self.JOB_DIR[job_id] = job_dir
 
 
+
+
   #########################################################################
   # usage ...
   #########################################################################
@@ -575,6 +585,7 @@ class break_it(engine):
         if option in ("--log-dir"):
           self.LOG_DIR = expanduser(argument)
           self.JOB_ID_FILE = "%s/job_ids.pickle" % self.LOG_DIR
+          self.LOCK_FILE = "%s/lock" % self.LOG_DIR
           
       # initialize Logs
       self.initialize_log_files()
