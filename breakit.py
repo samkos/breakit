@@ -63,15 +63,51 @@ class break_it(engine):
   def run(self):
     #
     self.initialize_scheduler()
-    if not(self.CONTINUE):
+    if not(self.CONTINUE or self.CONTINUEX):
       self.env_init()
       self.prepare_computation()
       job = self.job_submit(1,self.TO)
       self.log_debug("Saving Job Ids...",1)
       pickle.dump( self.JOB_ID, open(self.JOB_ID_FILE, "wb" ) )
     else:
-      print "continuing..."
+      self.manage_jobs()
+      
+  #########################################################################
+  # manage_jobs()
+  #########################################################################
+  def manage_jobs(self):
+    #
+    print "continuing..."
+    jobs = self.get_current_jobs_status()
+    print jobs
+    max=0
+    nb_jobs = 0
+    for j in jobs.keys():
+      status = jobs[j]
+      if status=='RUNNING' or status=='PENDING':
+        cmd = "squeue -r -u %s | grep %s " % (getpass.getuser(),j)
+        qualified_jobs = self.wrapped_system(cmd)
+        print qualified_jobs
+        for q in qualified_jobs.split('\n'):
+          q = re.sub(r"\s+"," ", q)
+          q = re.sub(r"^\s+","", q)
+          q = re.sub(r"\s.*$","", q)
+          print "/%s/" % q
+          if len(q):
+            job_nb = int(q.split("_")[1])
+            print job_nb
+            nb_jobs = nb_jobs+1
+            if job_nb>max:
+              max = job_nb
+        print nb_jobs,'are still queued for job ',j,'and max index is ',max
+        
+    print nb_jobs,'are still queued and max index is ',max,'out of ',self.TO,'jobs'
 
+    if max>0 and max<self.TO:
+      print 'can still submit...'
+      if self.CONTINUE:
+        self.job_array_submit("xxx", self.JOB_FILE_PATH, max+1, self.TO)
+        pickle.dump( self.JOB_ID, open(self.JOB_ID_FILE, "wb" ) )
 
 
   #########################################################################
@@ -259,12 +295,19 @@ class break_it(engine):
 
   def job_array_submit(self,job_name, job_file, array_first, array_last, dep=""):
 
+    array_last = min(array_first + self.CHUNK, array_last, self.TO)
+
+    if array_last < array_first:
+      print 'no more job need to be submitted'
+      sys.exit(0)
+      
     cmd = [self.SCHED_SUB]
     if self.NODES_FAILED:
       cmd = cmd + ["-x",self.NODES_FAILED]
 
     cmd = cmd + [self.SCHED_ARR,"%d-%d" % (array_first,array_last),job_file ]
 
+    print cmd
     self.log_debug("submitting : "+" ".join(cmd))
 
     if not self.DRY_RUN:
@@ -297,11 +340,12 @@ class break_it(engine):
 
   def job_submit(self,array_first,array_last):
 
-    self.log_debug('submitting job array [%s,%s]...' % (array_first,array_last),1) 
+    self.log_debug('submitting job array [%s,%s]...' % (array_first,array_last),1)
 
     job_template = self.create_job_template()
 
-    job_name = "%d-%d-%%K" % (array_first,array_last)
+    #job_name = "%d-%d-%%K" % (array_first,array_last)
+    job_name = "job_template"
     # job_dir = "%s/%03d" %  (self.JOB_DIR,n)
     # if os.path.exists(job_dir) and not (n+1 in self.JOBS_TO_RELAUNCH.keys()):
     #   self.error_report("Something is going weird...\ndirectory %s allready exists..." % job_dir)
@@ -341,6 +385,7 @@ class break_it(engine):
     job = ""
     
     job_name = self.JOB
+    job_file_path = '%s/%s.job' % (self.SAVE_DIR,job_name)
 
     if not(os.path.exists(job_name)):
         self.error_report("Template job file %s missing..." % job_name)
@@ -358,14 +403,14 @@ class break_it(engine):
         nb_header_lines = nb_header_lines - 1
         if (nb_header_lines) == 0:
 
-          finalize_cmd = "python -u ../../SAVE/%s.py --task=$task_id --finalize --log-dir=%s --range=%s" % \
-                         (self.APP_NAME,self.LOG_DIR,self.RANGE)
+          finalize_cmd = "python -u ../../SAVE/%s.py --task=$task_id --finalize --log-dir=%s --range=%s --job_file=%s" % \
+                         (self.APP_NAME,self.LOG_DIR,self.RANGE,job_file_path)
 
           job = job + self.job_header_amend()
           job = job + "mkdir -p %s/$task_id\n\n" % self.JOB_DIR
           job = job + "cd %s/$task_id \n\n" % self.JOB_DIR
-          job = job + "python -u ../../SAVE/%s.py --task=$task_id --continue --log-dir=%s --range=%s" % \
-              (self.APP_NAME,self.LOG_DIR,self.RANGE)
+          job = job + "python -u ../../SAVE/%s.py --task=$task_id --continuex --log-dir=%s --range=%s  --job_file=%s" % \
+              (self.APP_NAME,self.LOG_DIR,self.RANGE,job_file_path)
 
           if self.FAKE:
             job = job + " --fake"
@@ -479,6 +524,7 @@ class break_it(engine):
       else:
         print "\n  usage: \n \t python  %s.py \
                \n\t\t  --job=<job_script file> --range=<array first index>,<array last index> \
+               \n\t\t[ --chunk=<size of the chunk to be submitted simultaneously> ] \
                \n\t\t[ --help ] \
                \n\t\t[ --exclude_nodes=<nodes where not to run> ] \
                \n\t\t[ --restart | --scratch | --kill ]\
@@ -504,18 +550,21 @@ class break_it(engine):
       self.DRY_RUN = False
       self.RANGE = False
       self.TASK = -1
+      self.CHUNK = 3
 
-      self.SCRATCH = self.KILL = self.RESTART = self.CONTINUE = None
-      self.NODES_FAILED = None      
+      self.SCRATCH = self.KILL = self.RESTART = self.CONTINUE = self.CONTINUEX = False
+      self.NODES_FAILED = None
+      self.JOB_FILE_PATH = None
+      
       try:
           if " --help" in " "+" ".join(args) or " -h " in (" "+" ".join(args)+" ") :
             self.error_report("")
 
           opts, args = getopt.getopt(args, "h", 
-                            ["help", "job=", "range=", \
+                            ["help", "job=", "range=", "chunk=", \
                              "exclude_nodes=","dry",\
-                             "restart", "scratch", "kill", "continue", \
-                             "log-dir=","task=", \
+                             "restart", "scratch", "kill", "continue", "continuex", \
+                             "log-dir=","task=", "job_file_path=", \
                              "debug", "debug-level=",  \
                              "fake" ])    
       except getopt.GetoptError, err:
@@ -554,8 +603,12 @@ class break_it(engine):
           sys.exit(0)
         elif option in ("--continue"):
           self.CONTINUE = 1
+        elif option in ("--continuex"):
+          self.CONTINUEX = 1
         elif option in ("--job"):
           self.JOB = argument
+        elif option in ("--chunk"):
+          self.CHUNK = argument
         elif option in ("--range"):
           self.RANGE = argument
           self.TO = int(self.RANGE)
@@ -567,12 +620,13 @@ class break_it(engine):
            self.DRY_RUN = True
         elif option in ("--task"):
           self.TASK = argument
-          
+        elif option in ("--job_file_path"):
+          self.JOB_FILE_PATH = argument          
 
-      if not(self.JOB) and not(self.CONTINUE):
+      if not(self.JOB) and not(self.CONTINUE or self.CONTINUEX):
         self.error_report(message='please set a job to launch with the option --job=<job8file>')
 
-      if not(self.RANGE) and not(self.CONTINUE):
+      if not(self.RANGE) and not(self.CONTINUE or self.CONTINUEX):
         self.error_report(message='please set a range for your job with the option --range=<array first index>,<array last index>')
 
       self.log_info('starting Task %s' % self.TASK)
@@ -600,7 +654,7 @@ class break_it(engine):
           output += line
       if len(output):
         self.log_debug("output=+"+output,3)
-    return ouput
+    return output
 
   
 if __name__ == "__main__":
