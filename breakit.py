@@ -369,7 +369,8 @@ class break_it(engine):
     #   job_content = job_template.replace("__SCHEDULER_DEPENDENCY__","")
     job_content = job_template.replace("__SCHEDULER_DEPENDENCY__","")
     job_content = job_content.replace("__JOB_NAME__",job_name)
-    job_content = job_content.replace("__self.JOB_DIR__",self.JOB_DIR)
+    job_content = job_content.replace("__JOB_DIR__",self.JOB_DIR)
+    job_content = job_content.replace("__ARRAY_CURRENT_FIRST__","%s" % array_first)
 
             
     job_file = '%s/%s.job' % (self.SAVE_DIR,job_name)
@@ -411,13 +412,13 @@ class break_it(engine):
         nb_header_lines = nb_header_lines - 1
         if (nb_header_lines) == 0:
 
-          finalize_cmd = "python -u ../../SAVE/%s.py --task=$task_id --finalize --log-dir=%s --range=%s --job_file=%s" % \
+          finalize_cmd = "python -u ../../SAVE/%s.py --job=$job_id --task=$task_id --array-first=__ARRAY_CURRENT_FIRST__ --finalize --log-dir=%s --range=%s --job_file=%s" % \
                          (self.APP_NAME,self.LOG_DIR,self.RANGE,job_file_path)
 
           job = job + self.job_header_amend()
           job = job + "mkdir -p %s/$task_id\n\n" % self.JOB_DIR
           job = job + "cd %s/$task_id \n\n" % self.JOB_DIR
-          job = job + "python -u ../../SAVE/%s.py --task=$task_id --continuex --log-dir=%s --range=%s  --job_file=%s" % \
+          job = job + "python -u ../../SAVE/%s.py  --job=$job_id  --task=$task_id --array-first=__ARRAY_CURRENT_FIRST__ --continuex --log-dir=%s --range=%s  --job_file=%s" % \
               (self.APP_NAME,self.LOG_DIR,self.RANGE,job_file_path)
 
           if self.FAKE:
@@ -468,6 +469,7 @@ class break_it(engine):
       job = job + self.SCHED_TAG+" -e %s/__JOB_NAME__.err-%%a\n" % self.SAVE_DIR
       job = job + self.SCHED_TAG+" --job-name=__JOB_NAME__\n"
       job = job + """\ntask_id=`printf "%03d" "$SLURM_ARRAY_TASK_ID"`\n"""
+      job = job + """\njob_id=`printf "%03d" "$SLURM_JOB_ID"`\n"""
     return job
 
 
@@ -559,8 +561,10 @@ class break_it(engine):
       self.PBS = None
       self.DRY_RUN = False
       self.RANGE = False
-      self.TASK = -1
+      self.MY_TASK = -1
+      self.MY_JOB = -1
       self.CHUNK = 3
+      self.MY_ARRAY_CURRENT_FIRST = -1
 
       self.SCRATCH = self.KILL = self.RESTART = self.CONTINUE = self.CONTINUEX = False
       self.NODES_FAILED = None
@@ -574,7 +578,7 @@ class break_it(engine):
                             ["help", "job=", "range=", "chunk=", \
                              "exclude_nodes=","dry",\
                              "restart", "scratch", "kill", "continue", "continuex", \
-                             "log-dir=","task=", "job_file_path=", \
+                             "log-dir=","task=", "job=", "array-first=", "job_file_path=", \
                              "debug", "debug-level=",  \
                              "fake" ])    
       except getopt.GetoptError, err:
@@ -630,7 +634,11 @@ class break_it(engine):
         elif option in ("--dry"):
            self.DRY_RUN = True
         elif option in ("--task"):
-          self.TASK = argument
+          self.MY_TASK = argument
+        elif option in ("--job"):
+          self.MY_JOB = argument
+        elif option in ("--array-first"):
+          self.ARRAY_CURRENT_FIRST = argument
         elif option in ("--job_file_path"):
           self.JOB_FILE_PATH = argument          
 
@@ -640,7 +648,7 @@ class break_it(engine):
       if not(self.RANGE) and not(self.CONTINUE or self.CONTINUEX):
         self.error_report(message='please set a range for your job with the option --range=<array first index>,<array last index>')
 
-      self.log_info('starting Task %s' % self.TASK)
+      self.log_info('starting Task %s' % self.MY_TASK)
 
       return True
 
