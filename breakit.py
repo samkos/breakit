@@ -1,3 +1,4 @@
+
 import getopt, sys, os, socket, traceback
 
 import logging
@@ -302,12 +303,26 @@ class break_it(engine):
   #########################################################################
 
   def job_array_submit(self,job_name, job_file, array_first, array_last, dep=""):
+    print array_last
 
-    array_last = min(array_first + self.CHUNK, array_last, self.TO)
+    array_last = min(array_last,self.TO)
 
     if array_last < array_first:
       print 'no more job need to be submitted'
       sys.exit(0)
+
+
+    f=open(job_file,'r')
+    job_content = "".join(f.readlines())
+    f.close()
+
+    job_content = job_content.replace("__ARRAY_CURRENT_FIRST__","%s" % array_first)
+
+    job_file = '%s/%s.%d-%d.job' % (self.SAVE_DIR,job_name,array_first,array_last)
+    f=open(job_file,'w')
+    f.write(job_content)
+    f.close()
+
       
     cmd = [self.SCHED_SUB]
     if self.NODES_FAILED:
@@ -370,7 +385,6 @@ class break_it(engine):
     job_content = job_template.replace("__SCHEDULER_DEPENDENCY__","")
     job_content = job_content.replace("__JOB_NAME__",job_name)
     job_content = job_content.replace("__JOB_DIR__",self.JOB_DIR)
-    job_content = job_content.replace("__ARRAY_CURRENT_FIRST__","%s" % array_first)
 
             
     job_file = '%s/%s.job' % (self.SAVE_DIR,job_name)
@@ -378,7 +392,8 @@ class break_it(engine):
     f.write(job_content)
     f.close()
 
-    job_id=self.job_array_submit(job_name,job_file,array_first,array_last,dep)
+    for j in range(array_first,array_first+self.CHUNK,self.CHUNK/4):
+      job_id=self.job_array_submit(job_name,job_file,j,j+self.CHUNK/4-1,dep)
 
     self.log_debug('submitted job array [%s,%s] successfully...' % (array_first,array_last),1) 
 
@@ -563,7 +578,7 @@ class break_it(engine):
       self.RANGE = False
       self.MY_TASK = -1
       self.MY_JOB = -1
-      self.CHUNK = 3
+      self.CHUNK = 8
       self.MY_ARRAY_CURRENT_FIRST = -1
 
       self.SCRATCH = self.KILL = self.RESTART = self.CONTINUE = self.CONTINUEX = False
