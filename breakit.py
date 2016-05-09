@@ -81,6 +81,25 @@ class break_it(engine):
   #########################################################################
   def manage_jobs(self):
     #
+    if not(self.MY_ARRAY_CURRENT_FIRST == self.MY_TASK):
+      print 'not in charge to spawn more jobs'
+      return
+    
+    print "continuing... taking lock"
+
+    array_first = self.MY_TASK+self.CHUNK
+    if (array_first<self.TO):
+      print 'can still submit... (%d-%d) dependent on %s' % \
+        (array_first,array_first+self.CHUNK/4-1,self.MY_JOB)
+      if self.CONTINUE:
+        self.job_array_submit("job.template", self.JOB_FILE_PATH, array_first,array_first+self.CHUNK/4-1,self.MY_JOB)
+        pickle.dump( self.JOB_ID, open(self.JOB_ID_FILE, "wb" ) )
+
+  #########################################################################
+  # manage_jobs()
+  #########################################################################
+  def check_jobs(self):
+    #
     print "continuing... taking lock"
     lock_file = self.take_lock(self.LOCK_FILE)
     print "got lock!"
@@ -318,7 +337,7 @@ class break_it(engine):
 
     job_content = job_content.replace("__ARRAY_CURRENT_FIRST__","%s" % array_first)
 
-    job_file = '%s/%s.%d-%d.job' % (self.SAVE_DIR,job_name,array_first,array_last)
+    job_file = '%s/job_template.%d-%d.job' % (self.SAVE_DIR,array_first,array_last)
     f=open(job_file,'w')
     f.write(job_content)
     f.close()
@@ -330,6 +349,9 @@ class break_it(engine):
 
     cmd = cmd + [self.SCHED_ARR,"%d-%d" % (array_first,array_last),job_file ]
 
+    if (dep) :
+      cmd = cmd + [self.SCHED_DEP+":%s"%dep ]
+      
     print cmd
     self.log_debug("submitting : "+" ".join(cmd))
 
@@ -409,7 +431,7 @@ class break_it(engine):
     job = ""
     
     job_name = self.JOB
-    job_file_path = '%s/%s.job' % (self.SAVE_DIR,job_name)
+    job_file_path = '%s/job_template.job' % (self.SAVE_DIR) #,job_name)
 
     if not(os.path.exists(job_name)):
         self.error_report("Template job file %s missing..." % job_name)
@@ -427,13 +449,14 @@ class break_it(engine):
         nb_header_lines = nb_header_lines - 1
         if (nb_header_lines) == 0:
 
-          finalize_cmd = "python -u ../../SAVE/%s.py --job=$job_id --task=$task_id --array-first=__ARRAY_CURRENT_FIRST__ --finalize --log-dir=%s --range=%s --job_file=%s" % \
-                         (self.APP_NAME,self.LOG_DIR,self.RANGE,job_file_path)
+          finalize_cmd = "echo finalizing"
+          #finalize_cmd = "python -u ../../SAVE/%s.py --jobid=$job_id --taskid=$task_id --array-first=__ARRAY_CURRENT_FIRST__ --finalize --log-dir=%s --range=%s --job_file=%s" % \
+          #               (self.APP_NAME,self.LOG_DIR,self.RANGE,job_file_path)
 
           job = job + self.job_header_amend()
           job = job + "mkdir -p %s/$task_id\n\n" % self.JOB_DIR
           job = job + "cd %s/$task_id \n\n" % self.JOB_DIR
-          job = job + "python -u ../../SAVE/%s.py  --job=$job_id  --task=$task_id --array-first=__ARRAY_CURRENT_FIRST__ --continuex --log-dir=%s --range=%s  --job_file=%s" % \
+          job = job + "python -u ../../SAVE/%s.py  --jobid=$job_id  --taskid=$task_id --array-first=__ARRAY_CURRENT_FIRST__ --continue --log-dir=%s --range=%s  --job_file=%s" % \
               (self.APP_NAME,self.LOG_DIR,self.RANGE,job_file_path)
 
           if self.FAKE:
@@ -579,7 +602,7 @@ class break_it(engine):
       self.MY_TASK = -1
       self.MY_JOB = -1
       self.CHUNK = 8
-      self.MY_ARRAY_CURRENT_FIRST = -1
+      self.MY_ARRAY_CURRENT_FIRST = -3
 
       self.SCRATCH = self.KILL = self.RESTART = self.CONTINUE = self.CONTINUEX = False
       self.NODES_FAILED = None
@@ -593,7 +616,7 @@ class break_it(engine):
                             ["help", "job=", "range=", "chunk=", \
                              "exclude_nodes=","dry",\
                              "restart", "scratch", "kill", "continue", "continuex", \
-                             "log-dir=","task=", "job=", "array-first=", "job_file_path=", \
+                             "log-dir=","taskid=", "jobid=", "array-first=", "job_file_path=", \
                              "debug", "debug-level=",  \
                              "fake" ])    
       except getopt.GetoptError, err:
@@ -603,6 +626,7 @@ class break_it(engine):
       for option, argument in opts:
         if option in ("--log-dir"):
           self.LOG_DIR = expanduser(argument)
+          self.SAVE_DIR = expanduser(argument+"/../SAVE")
           self.JOB_ID_FILE = "%s/job_ids.pickle" % self.LOG_DIR
           self.LOCK_FILE = "%s/lock" % self.LOG_DIR
           
@@ -631,12 +655,12 @@ class break_it(engine):
           self.KILL = 1
           self.kill_jobs()
           sys.exit(0)
+        elif option in ("--job"):
+          self.JOB = argument
         elif option in ("--continue"):
           self.CONTINUE = 1
         elif option in ("--continuex"):
           self.CONTINUEX = 1
-        elif option in ("--job"):
-          self.JOB = argument
         elif option in ("--chunk"):
           self.CHUNK = argument
         elif option in ("--range"):
@@ -648,12 +672,12 @@ class break_it(engine):
           self.FAKE = True
         elif option in ("--dry"):
            self.DRY_RUN = True
-        elif option in ("--task"):
-          self.MY_TASK = argument
-        elif option in ("--job"):
+        elif option in ("--taskid"):
+          self.MY_TASK = int(argument)
+        elif option in ("--jobid"):
           self.MY_JOB = argument
         elif option in ("--array-first"):
-          self.ARRAY_CURRENT_FIRST = argument
+          self.MY_ARRAY_CURRENT_FIRST = int(argument)
         elif option in ("--job_file_path"):
           self.JOB_FILE_PATH = argument          
 

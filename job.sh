@@ -6,5 +6,5 @@
 #SBATCH --job-name=test
 
 hostname
-sleep 30
+sleep 5
 
