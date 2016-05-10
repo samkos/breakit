@@ -651,6 +651,11 @@ class break_it(engine):
           self.RESTART = 1
         elif option in ("--scratch"):
           self.SCRATCH = 1
+          self.log_info("restart from scratch")
+          self.log_info("killing previous jobs...")
+          self.kill_jobs()
+          shutil.rmtree(self.JOB_DIR)
+          shutil.rmtree(self.SAVE_DIR)
         elif option in ("--kill"):
           self.KILL = 1
           self.kill_jobs()
