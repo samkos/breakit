@@ -82,15 +82,15 @@ class break_it(engine):
   def manage_jobs(self):
     #
     if not(self.MY_ARRAY_CURRENT_FIRST == self.MY_TASK):
-      print 'not in charge to spawn more jobs'
+      self.log_debug('not in charge to spawn more jobs')
       return
     
-    print "continuing... taking lock"
+    self.log_info("my task is in charge of adding work...")
 
     array_first = self.MY_TASK+self.CHUNK
     if (array_first<self.TO):
-      print 'can still submit... (%d-%d) dependent on %s' % \
-        (array_first,array_first+self.CHUNK/4-1,self.MY_JOB)
+      self.log_info('can still submit... (%d-%d) dependent on %s' % \
+        (array_first,array_first+self.CHUNK/4-1,self.MY_JOB))
       if self.CONTINUE:
         self.job_array_submit("job.template", self.JOB_FILE_PATH, array_first,array_first+self.CHUNK/4-1,self.MY_JOB)
         pickle.dump( self.JOB_ID, open(self.JOB_ID_FILE, "wb" ) )
@@ -322,12 +322,11 @@ class break_it(engine):
   #########################################################################
 
   def job_array_submit(self,job_name, job_file, array_first, array_last, dep=""):
-    print array_last
 
     array_last = min(array_last,self.TO)
 
     if array_last < array_first:
-      print 'no more job need to be submitted'
+      self.log_debug('no more job need to be submitted')
       sys.exit(0)
 
 
@@ -344,15 +343,15 @@ class break_it(engine):
 
       
     cmd = [self.SCHED_SUB]
+    if (dep) :
+      cmd = cmd + [self.SCHED_DEP+":%s"%dep ]
+
     if self.NODES_FAILED:
       cmd = cmd + ["-x",self.NODES_FAILED]
 
     cmd = cmd + [self.SCHED_ARR,"%d-%d" % (array_first,array_last),job_file ]
 
-    if (dep) :
-      cmd = cmd + [self.SCHED_DEP+":%s"%dep ]
       
-    print cmd
     self.log_debug("submitting : "+" ".join(cmd))
 
     if not self.DRY_RUN:
@@ -644,9 +643,11 @@ class break_it(engine):
         elif option in ("--info-level"):
           self.INFO = int(argument)
         elif option in ("--debug"):
-          self.DEBUG = 1
+          self.DEBUG = 0
+          self.log.setLevel(logging.DEBUG)
         elif option in ("--debug-level"):
           self.DEBUG = int(argument)
+          self.log.setLevel(logging.DEBUG)
         elif option in ("--restart"):
           self.RESTART = 1
         elif option in ("--scratch"):
