@@ -613,7 +613,7 @@ class break_it(engine):
 
           opts, args = getopt.getopt(args, "h", 
                             ["help", "job=", "range=", "chunk=", \
-                             "exclude_nodes=","dry",\
+                             "exclude_nodes=","dry", "create-template", \
                              "restart", "scratch", "kill", "continue", "continuex", \
                              "log-dir=","taskid=", "jobid=", "array-first=", "job_file_path=", \
                              "debug", "debug-level=",  \
@@ -657,6 +657,8 @@ class break_it(engine):
           self.kill_jobs()
           shutil.rmtree(self.JOB_DIR)
           shutil.rmtree(self.SAVE_DIR)
+        elif option in ("--create-template"):
+           self.create_breakit_template()
         elif option in ("--kill"):
           self.KILL = 1
           self.kill_jobs()
@@ -697,29 +699,18 @@ class break_it(engine):
 
       return True
 
+
   #########################################################################
   # os.system wrapped to enable Trace if needed
   #########################################################################
 
-  def wrapped_system(self,cmd,comment="No comment",fake=False):
+  def create_breakit_template(self):
 
-    self.log_debug("\tcurrently executing /%s/ :\n\t\t%s" % (comment,cmd))
-
-    if not(fake) and not(self.FAKE):
-      #os.system(cmd)
-      #subprocess.call(cmd,shell=True,stderr=subprocess.STDOUT)
-      proc = subprocess.Popen(cmd, shell=True, bufsize=1, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-      output = ""
-      while (True):
-          # Read line from stdout, break if EOF reached, append line to output
-          line = proc.stdout.readline()
-          #line = line.decode()
-          if (line == ""): break
-          output += line
-      if len(output):
-        self.log_debug("output=+"+output,3)
-    return output
-
+    path = os.getenv('BREAKIT_PATH')
+    if not(path):
+      path='.'
+    l = "".join(open('%s/run_tests.py' % path,"r").readlines())
+    self.create_template("run_test.py__SEP2__"+l)
   
 if __name__ == "__main__":
     K = break_it()
