@@ -26,9 +26,9 @@ from env import *
 ERROR = -1
 
 
-class break_it(engine):
+class breakit(engine):
 
-  def __init__(self):
+  def __init__(self,pysam_version=0.8):
 
 
     self.WORKSPACE_FILE = "nodecheck.pickle"
@@ -37,7 +37,7 @@ class break_it(engine):
     self.ALL = True
     self.APP_NAME  = "breakit"
     self.VERSION = "0.1"
-    self.PYSAM_VERSION_REQUIRED = 0.8
+    self.PYSAM_VERSION_REQUIRED = pysam_version
       
     
     self.JOB_DIR = os.path.abspath("./JOBS/RESULTS")
@@ -59,6 +59,7 @@ class break_it(engine):
 
     engine.__init__(self,self.APP_NAME,self.VERSION,self.LOG_DIR,self.PYSAM_VERSION_REQUIRED)
 
+    self.env_init()
     self.run()
       
   #########################################################################
@@ -66,9 +67,7 @@ class break_it(engine):
   #########################################################################
   def run(self):
     #
-    self.initialize_scheduler()
     if not(self.CONTINUE or self.CONTINUEX):
-      self.env_init()
       self.prepare_computation()
       job = self.job_submit(1,self.TO)
       self.log_debug("Saving Job Ids...",1)
@@ -146,6 +145,8 @@ class break_it(engine):
   def env_init(self):
 
     self.log_debug('initialize environment ')
+
+    self.initialize_scheduler()
 
     if self.CONTINUE:
       return
@@ -232,6 +233,8 @@ class break_it(engine):
 
     self.log_debug("getting  current status of all jobs",1)
 
+    self.initialize_scheduler()
+
     existing_jobs = {}
     completed_jobs = {}
 
@@ -290,8 +293,6 @@ class break_it(engine):
   def kill_jobs(self,force=False):
 
     self.log_debug("killing all jobs",1)
-
-    self.initialize_scheduler()
 
     existing_jobs = self.get_current_jobs_status()
 
@@ -528,8 +529,8 @@ class break_it(engine):
 
   def save_workspace(self):
       
-      self.log_debug("saving variables to file "+workspace_file)
       workspace_file = self.WORKSPACE_FILE
+      self.log_debug("saving variables to file "+workspace_file)
       f_workspace = open(workspace_file+".new", "wb" )
       # Save your data here
       #pickle.dump(self.JOB_ID    ,f_workspace)
@@ -545,6 +546,7 @@ class break_it(engine):
 
   def load_workspace(self):
 
+      workspace_file = self.WORKSPACE_FILE
       self.log_debug("loading variables from file "+workspace_file)
 
       f_workspace = open( self.WORKSPACE_FILE, "rb" )
@@ -690,7 +692,7 @@ class break_it(engine):
           self.JOB_FILE_PATH = argument          
 
       if not(self.JOB) and not(self.CONTINUE or self.CONTINUEX):
-        self.error_report(message='please set a job to launch with the option --job=<job8file>')
+        self.error_report(message='please set a job to launch with the option --job=<job file>')
 
       if not(self.RANGE) and not(self.CONTINUE or self.CONTINUEX):
         self.error_report(message='please set a range for your job with the option --range=<array first index>,<array last index>')
@@ -713,5 +715,5 @@ class break_it(engine):
     self.create_template("run_test.py__SEP2__"+l)
   
 if __name__ == "__main__":
-    K = break_it()
+    K = breakit()
     
