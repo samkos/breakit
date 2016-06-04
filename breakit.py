@@ -20,7 +20,7 @@ import getpass
 from os.path import expanduser
 import glob
 
-from pysam import engine
+from engine import engine
 from env import *
 
 ERROR = -1
@@ -28,21 +28,22 @@ ERROR = -1
 
 class breakit(engine):
 
-  def __init__(self,pysam_version=0.8):
+  def __init__(self,engine_version=0.8,app_name='breakit'):
 
 
     self.WORKSPACE_FILE = "nodecheck.pickle"
     self.check_python_version()
     self.CLEAN = False
     self.ALL = True
-    self.APP_NAME  = "breakit"
+    self.APP_NAME  = app_name
     self.VERSION = "0.1"
-    self.PYSAM_VERSION_REQUIRED = pysam_version
+    self.ENGINE_VERSION_REQUIRED = engine_version
       
     
-    self.JOB_DIR = os.path.abspath("./JOBS/RESULTS")
-    self.SAVE_DIR = os.path.abspath("./JOBS/SAVE")
-    self.LOG_DIR = os.path.abspath("./JOBS/LOGS")
+    self.JOB_DIR = os.path.abspath("./.breakit/RESULTS")
+    self.SAVE_DIR = os.path.abspath("./.breakit/SAVE")
+    self.LOG_DIR = os.path.abspath("./.breakit/LOGS")
+    self.BREAKIT_DIR = os.getenv('BREAKIT_PATH')
     
     self.JOB_ID = {}
     self.JOB_ID_FILE = "%s/job_ids.pickle" % self.LOG_DIR
@@ -54,10 +55,10 @@ class breakit(engine):
     self.MY_EXEC_SAVED = self.SAVE_DIR+"/"+os.path.basename(sys.argv[0])
     self.INITIAL_DATA_DIR = "."
 
+    engine.__init__(self,self.APP_NAME,self.VERSION,self.LOG_DIR,self.ENGINE_VERSION_REQUIRED)
     if os.path.exists(self.WORKSPACE_FILE):
       self.load_workspace()
 
-    engine.__init__(self,self.APP_NAME,self.VERSION,self.LOG_DIR,self.PYSAM_VERSION_REQUIRED)
 
     self.env_init()
     self.run()
@@ -144,7 +145,7 @@ class breakit(engine):
 
   def env_init(self):
 
-    self.log_debug('initialize environment ')
+    self.log_debug('initialize environment ',1)
 
     self.initialize_scheduler()
 
@@ -163,7 +164,7 @@ class breakit(engine):
     # for f in self.FILES_TO_COPY:
     #   os.system("cp %s/%s %s/" % (self.INITIAL_DATA_DIR,f,self.JOB_DIR_0))
 
-    self.log_info('environment initialized successfully')
+    self.log_info('environment initialized successfully',1)
     
 
   #########################################################################
@@ -187,6 +188,8 @@ class breakit(engine):
       self.SCHED_KIL = "scancel"
       self.SCHED_Q = "squeue"
       self.SCHED_DEP = "--dependency=afterany"
+      self.SCHED_DEP_OK = "--dependency=afterok"
+      self.SCHED_DEP_NOK = "--dependency=afternotok"
 
 
   #########################################################################
@@ -454,10 +457,12 @@ class breakit(engine):
           #               (self.APP_NAME,self.LOG_DIR,self.RANGE,job_file_path)
 
           job = job + self.job_header_amend()
-          job = job + "mkdir -p %s/$task_id\n\n" % self.JOB_DIR
-          job = job + "cd %s/$task_id \n\n" % self.JOB_DIR
-          job = job + "python -u ../../SAVE/%s.py  --jobid=$job_id  --taskid=$task_id --array-first=__ARRAY_CURRENT_FIRST__ --continue --log-dir=%s --range=%s  --job_file=%s" % \
-              (self.APP_NAME,self.LOG_DIR,self.RANGE,job_file_path)
+          #job = job + "mkdir -p %s/$task_id\n\n" % self.JOB_DIR
+          #job = job + "cd %s/$task_id \n\n" % self.JOB_DIR
+          #job = job + "python -u ../../SAVE/%s.py  --jobid=$job_id  --taskid=$task_id --array-first=__ARRAY_CURRENT_FIRST__ --continue --log-dir=%s --range=%s  --job_file=%s" % \
+          #    (self.APP_NAME,self.LOG_DIR,self.RANGE,job_file_path)
+          job = job + "python -u %s/breakit.py  --jobid=$job_id  --taskid=$task_id --array-first=__ARRAY_CURRENT_FIRST__ --continue --log-dir=%s --range=%s  --chunk=%s --job_file=%s" % \
+              (self.BREAKIT_DIR,self.LOG_DIR,self.RANGE,self.CHUNK,job_file_path)
 
           if self.FAKE:
             job = job + " --fake"
@@ -503,9 +508,9 @@ class breakit(engine):
       job = job + self.SCHED_TAG+" -N __JOB_NAME__\n"
       job = job + """\ntask_id=`printf "%03d" "$PBS_ARRAYID"`\n"""
     else:
-      job = job + self.SCHED_TAG+" -o %s/__JOB_NAME__.out-%%a\n" % self.SAVE_DIR
-      job = job + self.SCHED_TAG+" -e %s/__JOB_NAME__.err-%%a\n" % self.SAVE_DIR
-      job = job + self.SCHED_TAG+" --job-name=__JOB_NAME__\n"
+      #job = job + self.SCHED_TAG+" -o %s/__JOB_NAME__.out-%%a\n" % self.SAVE_DIR
+      #job = job + self.SCHED_TAG+" -e %s/__JOB_NAME__.err-%%a\n" % self.SAVE_DIR
+      #job = job + self.SCHED_TAG+" --job-name=__JOB_NAME__\n"
       job = job + """\ntask_id=`printf "%03d" "$SLURM_ARRAY_TASK_ID"`\n"""
       job = job + """\njob_id=`printf "%03d" "$SLURM_JOB_ID"`\n"""
     return job
@@ -672,7 +677,7 @@ class breakit(engine):
         elif option in ("--continuex"):
           self.CONTINUEX = 1
         elif option in ("--chunk"):
-          self.CHUNK = argument
+          self.CHUNK = int(argument)
         elif option in ("--range"):
           self.RANGE = argument
           self.TO = int(self.RANGE)
