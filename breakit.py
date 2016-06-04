@@ -579,7 +579,7 @@ class breakit(engine):
           print "\tappend -h for the list of available options..."
       else:
         print "\n  usage: \n \t python  %s.py \
-               \n\t\t  --job=<job_script file> --range=<array first index>,<array last index> \
+               \n\t\t  --job=<job_script file> --range=<array nb of occurence> \
                \n\t\t[ --chunk=<size of the chunk to be submitted simultaneously> ] \
                \n\t\t[ --help ] \
                \n\t\t[ --exclude_nodes=<nodes where not to run> ] \
