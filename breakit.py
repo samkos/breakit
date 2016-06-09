@@ -700,7 +700,11 @@ class breakit(engine):
         self.error_report(message='please set a job to launch with the option --job=<job file>')
 
       if not(self.RANGE) and not(self.CONTINUE or self.CONTINUEX):
-        self.error_report(message='please set a range for your job with the option --range=<array first index>,<array last index>')
+        self.error_report(message='please set \
+                                 \n        - a range for your job with the option \
+                                 \n                 --range=<total size of the jobs in the array> \
+                                 \n        - the number of jobs you want in the queue with the option\
+                                 \n                 --chunk=<size of the chunk to be submitted simultaneously>')
 
       self.log_info('starting Task %s' % self.MY_TASK)
 
