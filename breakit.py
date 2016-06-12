@@ -1,4 +1,5 @@
 
+
 import getopt, sys, os, socket, traceback
 
 import logging
@@ -205,23 +206,6 @@ class breakit(engine):
     self.log_debug("======== STARTING BREAKIT ==========")
     self.log_debug("now : "+getDate())
 
-
-    if (os.path.exists(self.JOB_DIR)):
-      if not(self.SCRATCH or self.RESTART or self.KILL): 
-        self.error_report(error_detail="RESULT_DIR_EXISTING",\
-                message = \
-                "Result directory %s already exists from a previous run "%self.JOB_DIR + \
-                "\nplease rename it, add --restart or --scratch to your command line" +\
-                "\n\t\t" + " ".join(sys.argv)+" --restart" + \
-                "\n\t\t" + " ".join(sys.argv)+" --scratch")
-      if  self.SCRATCH: 
-        self.log_info("restart from scratch")
-        self.log_info("killing previous jobs...")
-        self.kill_jobs()
-        shutil.rmtree(self.JOB_DIR)
-        shutil.rmtree(self.SAVE_DIR)
-        for self.log_file in glob.glob("%s/level*.log" % self.LOG_DIR):
-          os.unlink(self.log_file)
 
     for d in [self.JOB_DIR,self.SAVE_DIR,self.LOG_DIR]:
       if not(os.path.exists(d)):
@@ -578,14 +562,15 @@ class breakit(engine):
           print "\n\tError %s:\n\t\t%s\n" % (error_detail,message)
           print "\tappend -h for the list of available options..."
       else:
-        print "\n  usage: \n \t python  %s.py \
-               \n\t\t  --job=<job_script file> --range=<array nb of occurence> \
-               \n\t\t[ --chunk=<size of the chunk to be submitted simultaneously> ] \
-               \n\t\t[ --help ] \
-               \n\t\t[ --exclude_nodes=<nodes where not to run> ] \
-               \n\t\t[ --restart | --scratch | --kill ]\
-               \n\t\t[ --debug ] [ --debug-level=[0|1|2]  ] [ --fake ]  \
-             \n"   % self.APP_NAME
+        print ("\n  usage: \n \t python  %s.py " + \
+               "\n\t\t  --job=<Slurm job_script file> " + \
+               "\n\t\t  --range=<total number of jobs to submit> " + \
+               "\n\t\t[ --chunk=<maximum number of jobs to queue simultaneously> ] " + \
+               "\n\t\t[ --help ] " + \
+            " \n" )  % self.APP_NAME
+               # \n\t\t[ --exclude_nodes=<nodes where not to run> ] \
+               # \n\t\t[ --restart | --scratch | --kill ]\
+               # \n\t\t[ --debug ] [ --debug-level=[0|1|2]  ] [ --fake ]  \
 
       if exit:
         sys.exit(1)
@@ -671,7 +656,7 @@ class breakit(engine):
           self.kill_jobs()
           sys.exit(0)
         elif option in ("--job"):
-          self.JOB = argument
+          self.JOB = os.path.expanduser(argument)
         elif option in ("--continue"):
           self.CONTINUE = 1
         elif option in ("--continuex"):
@@ -700,13 +685,13 @@ class breakit(engine):
         self.error_report(message='please set a job to launch with the option --job=<job file>')
 
       if not(self.RANGE) and not(self.CONTINUE or self.CONTINUEX):
-        self.error_report(message='please set \
-                                 \n        - a range for your job with the option \
-                                 \n                 --range=<total size of the jobs in the array> \
-                                 \n        - the number of jobs you want in the queue with the option\
-                                 \n                 --chunk=<size of the chunk to be submitted simultaneously>')
+        self.error_report(message='please set ' + \
+                                 '\n  - a range for your job with the option ' + \
+                                 '\n           --range=<total number of the jobs in the array> ' + \
+                                 '\n  - the number of jobs you want in the queue with the option' + \
+                                 '\n           --chunk=<maximum number of jobs to queued simultaneously>')
 
-      self.log_info('starting Task %s' % self.MY_TASK)
+      self.log_info('starting Task %s' % self.MY_TASK,1)
 
       return True
 

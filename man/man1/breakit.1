@@ -1,0 +1,66 @@
+.TH breakit 1  "June 5, 2016" "version 0.1" "USER COMMANDS"
+.SH NAME
+breakit \- KSL many jobs automated submitter
+.
+.
+.SH SYNOPSIS
+.IX Header "SYNOPSIS"
+breakit  \fB\-\-job=\fR\fIany-Slurm-Job\fR
+         \fB\-\-range=\fR\fITotal-number-of-jobs-to-submit\fR
+         [\fB\-\-chunk\fR=\fR\fIMaximum-number-of-jobs-to-be-seen-in-the-queue\fR]
+.
+.
+.
+.SH DESCRIPTION
+\fBbreakit\fR assists the user in submitting Slurm job array of important
+size on shaheen II. It has been designed, developped and officially
+maintained by the Kaust Supercomputing Laboratory.
+.PP
+By policy, on shaheen II, the maximum number of jobs authorized in the
+queue is limited per user. \fBbreakit\fR seamlessly allows the submission of
+job arrays whose total number can be higher than this limit. 
+.
+.
+.SH USE
+.PP
+Not a single modification needs to be made to the Slurm job it self.
+Let assume 1000 occcurences of "\fImy_job\fR" needs to be submitted, the
+command:
+.PP
+.BI "   breakit \-\-job=\fImy-job\fR \-\-range=\fI1000\fR \-\-chunk=\fI20\fR"
+.PP
+will submit the 1000 jobs to shaheen II in several chunks of 20
+jobs. At a time, no more than 20 jobs will appear in the queue. In
+reality, \fBbreakit\fR will use job dependency to automate the ongoing
+submission of the remaining jobs. These batches of 20 jobs will be
+seen as successive job arrays in the scheduling queue.
+.PP
+If no option --chunk is mentionned, default number of jobs queued simultaneously is set to 8.
+.PP
+To cancel the full set of jobs, an option --kill is under development
+and testing. In the meantime, when choosing a different name for all the jobs launched through \fBbreakit\fR
+the following Slurm command can be used:
+.PP
+.BI "   scancel  \-n=\fIname-of-job\fR"
+.SH AUTHOR
+Written by Samuel Kortas (samuel.kortas (at) kaust.edu.sa)
+.SH "REPORTING BUGS"
+Report KTF bugs to help@hpc.kaust.edu.sa
+.br
+KTF home page: <https://bitbucket.org/kaust_KSL/ktf>
+.br
+KAUST Supercomputing Laboratory: <http://hpc.kaust.edu.sa/>
+.SH COPYRIGHT
+Copyright \(co 2016 KAUST Supercomputing Laboratory
+License GPLv3+: GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>.
+.br
+This is free software: you are free to change and redistribute it.
+There is NO WARRANTY, to the extent permitted by law.
+.SH "SEE ALSO"
+A comprehensive presentation of \fBbreakit\fR has been given by Samuel Kortas during
+the KSL Workshop entitled 'Boost your efficiency when dealing with
+multiple jobs on the Cray XC40 supercomputer Shaheen II' held at KAUST
+On Sunday June 5th 2016. The workshop slides can be freely downloaded from
+<https://www.hpc.kaust.edu.sa/sites/default/files/files/public/many_jobs.pdf>
+.PP
+ktf(1) decimate(1)
