@@ -49,8 +49,8 @@ REPORTING BUGS
        KAUST Supercomputing Laboratory: <http://hpc.kaust.edu.sa/>
 
 COPYRIGHT
-       Copyright  ©  2016  KAUST Supercomputing Laboratory License GPLv3+: GNU
-       GPL version 3 or later <http://gnu.org/licenses/gpl.html>.
+       Copyright  © 2016  KAUST Supercomputing Laboratory License LGPLv3+: GNU
+       LGPL version 3 or later <http://gnu.org/licenses/gpl.html>.
        This is free software: you are free  to  change  and  redistribute  it.
        There is NO WARRANTY, to the extent permitted by law.
 
@@ -59,6 +59,6 @@ SEE ALSO
        during the KSL Workshop entitled 'Boost your  efficiency  when  dealing
        with  multiple  jobs on the Cray XC40 supercomputer Shaheen II' held at
        KAUST On Sunday June 5th 2016. The workshop slides can be freely  down-
-       loaded                                                             from
-       <https://www.hpc.kaust.edu.sa/sites/default/files/files/pub-
-       lic/many_jobs.pdf>
+       loaded from
+       <https://www.hpc.kaust.edu.sa/sites/default/files/files/public/many_jobs.pdf>
+
