@@ -101,13 +101,14 @@ class breakit(engine):
   #########################################################################
   def manage_jobs(self):
     #
-    if not(self.MY_ARRAY_CURRENT_FIRST == self.MY_TASK):
-      self.log_debug('not in charge to spawn more jobs')
+    if not(self.ARRAY[self.MY_ARRAY_CURRENT_FIRST-1] == self.MY_TASK):
+      self.log_debug('not in charge to spawn more jobs: MY_ARRAY_CURRENT_FIRST=%s not equals MY_TASK=%s ' % \
+                     (self.ARRAY[self.MY_ARRAY_CURRENT_FIRST-1],self.MY_TASK))
       return
     
     self.log_info("my task is in charge of adding work...")
 
-    range_first = self.MY_TASK+self.CHUNK
+    range_first = self.MY_ARRAY_CURRENT_FIRST+self.CHUNK
     if (range_first<self.TO):
       self.log_info('can still submit... (%d-%d) dependent on %s' % \
         (range_first,range_first+self.CHUNK/4-1,self.MY_JOB))
@@ -356,7 +357,7 @@ class breakit(engine):
     if self.NODES_FAILED:
       cmd = cmd + ["-x",self.NODES_FAILED]
 
-    cmd = cmd + [self.SCHED_ARR,"%s" % self.ARRAY[range_first:range_last],job_file ]
+    cmd = cmd + [self.SCHED_ARR,"%s" % self.ARRAY[(range_first-1):range_last],job_file ]
 
       
     self.log_debug("submitting : "+" ".join(cmd))
@@ -458,8 +459,8 @@ class breakit(engine):
           finalize_cmd = "echo finalizing"
           job = job + self.job_header_amend()
 
-          job = job + "python -u %s/breakit.py  --jobid=$job_id  --taskid=$task_id --array-first=__ARRAY_CURRENT_FIRST__ --continue --log-dir=%s --range=%s  --chunk=%s --job_file=%s" % \
-              (self.BREAKIT_DIR,self.LOG_DIR,self.RANGE,self.CHUNK,job_file_path)
+          job = job + "python -u %s/breakit.py  --jobid=$job_id  --taskid=$task_id --range-first=__ARRAY_CURRENT_FIRST__ --continue --log-dir=%s --range=%s --array=%s --chunk=%s --job_file=%s" % \
+              (self.BREAKIT_DIR,self.LOG_DIR,self.RANGE,self.ARRAY,self.CHUNK,job_file_path)
 
           if self.FAKE:
             job = job + " --fake"
@@ -620,7 +621,7 @@ class breakit(engine):
                             ["help", "job=", "range=", "array=", "chunk=", \
                              "exclude_nodes=","dry", "create-template", \
                              "restart", "scratch", "kill", "continue", "continuex", \
-                             "log-dir=","taskid=", "jobid=", "array-first=", "job_file_path=", \
+                             "log-dir=","taskid=", "jobid=", "range-first=", "job_file_path=", \
                              "debug", "debug-level=",  \
                              "fake" ])    
       except getopt.GetoptError, err:
@@ -706,9 +707,9 @@ class breakit(engine):
         self.RANGE = len(self.ARRAY)
         self.TO = int(self.RANGE)
 
-      if (self.ARRAY and self.RANGE and  not(self.RANGE == len(self.ARRAY))):
-        self.error_report(message='mismatch between --range and --array-argument ' + \
-                                 '\n  - range should be equal of the number of array-indices')
+      if (self.ARRAY and self.RANGE and  not(int(self.RANGE) == len(self.ARRAY))):
+        self.error_report(message='mismatch between --range=%s and --array-argument=%s ' % (self.RANGE,self.ARRAY) + \
+                                 '\n  - range should be equal of the number of array-indices: %s' % len(self.ARRAY))
 
       print self.RANGE,self.ARRAY
       if not(self.RANGE) and not(self.CONTINUE or self.CONTINUEX):
