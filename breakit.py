@@ -111,6 +111,9 @@ class breakit(engine):
     self.log_info("my task is in charge of adding work...")
 
     range_first = self.MY_ARRAY_CURRENT_FIRST+self.CHUNK
+
+    self.log_debug("range_first=%s, self.TO=%s, len(self.ARRAY)=%s" % (range_first, self.TO, len(self.ARRAY)))
+
     if (range_first<=self.TO):
       self.log_info('can still submit... (%d-%d) dependent on %s' % \
         (range_first,min(range_first+self.CHUNK/4-1,self.TO),self.MY_JOB))
@@ -710,7 +713,7 @@ class breakit(engine):
         self.error_report(message='please set a job to launch with the option --job=<job file>')
 
       if (self.RANGE and not(self.ARRAY)):
-        self.ARRAY = RangeSet("1-%s" , self.RANGE)
+        self.ARRAY = RangeSet("1-%s" % self.RANGE)
 
       if (self.ARRAY and not(self.RANGE)):
         self.RANGE = len(self.ARRAY)
