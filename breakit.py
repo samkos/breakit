@@ -53,12 +53,11 @@ class breakit(engine):
   def __init__(self,engine_version=0.14,app_name='breakit'):
 
 
-    self.WORKSPACE_FILE = "nodecheck.pickle"
     self.check_python_version()
     self.CLEAN = False
     self.ALL = True
     self.APP_NAME  = app_name
-    self.VERSION = "0.2"
+    self.VERSION = "0.3"
     self.ENGINE_VERSION_REQUIRED = engine_version
       
     
@@ -71,6 +70,7 @@ class breakit(engine):
     self.JOB_ID_FILE = "%s/job_ids.pickle" % self.LOG_DIR
     self.LOCK_FILE = "%s/lock" % self.LOG_DIR
     self.STATS_ID_FILE = "%s/stats_ids.pickle" % self.LOG_DIR
+    self.WORKSPACE_FILE = "%s/workspace.pickle" % self.SAVE_DIR
         
 
     self.MY_EXEC = sys.argv[0]
@@ -231,6 +231,22 @@ class breakit(engine):
     self.log_debug("======== STARTING BREAKIT ==========")
     self.log_debug("now : "+getDate())
 
+    if (os.path.exists(self.JOB_DIR)):
+      if not(self.SCRATCH or self.RESTART or self.KILL): 
+        self.error_report(error_detail="RESULT_DIR_EXISTING",\
+                message = \
+                "Result directory %s already exists from a previous run "%self.JOB_DIR + \
+                "\nplease rename it, add --restart or --scratch to your command line" +\
+                "\n\t\t" + " ".join(sys.argv)+" --restart" + \
+                "\n\t\t" + " ".join(sys.argv)+" --scratch")
+      if  self.SCRATCH: 
+        self.log_info("restart from scratch")
+        self.log_info("killing previous jobs...")
+        self.kill_jobs()
+        shutil.rmtree(self.JOB_DIR)
+        shutil.rmtree(self.SAVE_DIR)
+        for self.log_file in glob.glob("%s/level*.log" % self.LOG_DIR):
+          os.unlink(self.log_file)
 
     for d in [self.JOB_DIR,self.SAVE_DIR,self.LOG_DIR]:
       if not(os.path.exists(d)):
@@ -389,7 +405,8 @@ class breakit(engine):
       self.log_debug(" with cmd = %s " % " ".join(cmd),1)
       job_id = "self.JOB_ID_%s" % job_name
 
-    self.JOB_ID[job_name] =  job_id
+    self.JOB_ID[job_id] = dep
+    self.save_workspace()
 
     print 'submitting job %s Job # %s_%s-%s' % (job_name,job_id,range_first,range_last)
 
@@ -544,14 +561,16 @@ class breakit(engine):
       
       workspace_file = self.WORKSPACE_FILE
       self.log_debug("saving variables to file "+workspace_file)
+
+      lock_file = self.take_lock(self.LOCK_FILE)
       f_workspace = open(workspace_file+".new", "wb" )
       # Save your data here
-      #pickle.dump(self.JOB_ID    ,f_workspace)
+      pickle.dump(self.JOB_ID    ,f_workspace)
       f_workspace.close()
       if os.path.exists(workspace_file):
         os.rename(workspace_file,workspace_file+".old")
       os.rename(workspace_file+".new",workspace_file)
-      
+      self.unlock(lock_file)
 
   #########################################################################
   # load_workspace
@@ -564,12 +583,9 @@ class breakit(engine):
 
       f_workspace = open( self.WORKSPACE_FILE, "rb" )
       # retrieve data here
-      #self.JOB_ID    = pickle.load(f_workspace)
+      self.JOB_ID    = pickle.load(f_workspace)
       f_workspace.close()
 
-      for job_dir in self.JOB_ID.keys():
-        job_id  = self.JOB_ID[job_dir]
-        self.JOB_DIR[job_id] = job_dir
 
 
 
@@ -644,6 +660,8 @@ class breakit(engine):
           self.SAVE_DIR = expanduser(argument+"/../SAVE")
           self.JOB_ID_FILE = "%s/job_ids.pickle" % self.LOG_DIR
           self.LOCK_FILE = "%s/lock" % self.LOG_DIR
+          self.WORKSPACE_FILE = "%s/workspace.pickle" % self.SAVE_DIR
+
           
       # initialize Logs
       self.initialize_log_files()
@@ -671,8 +689,9 @@ class breakit(engine):
           self.log_info("restart from scratch")
           self.log_info("killing previous jobs...")
           self.kill_jobs()
-          shutil.rmtree(self.JOB_DIR)
-          shutil.rmtree(self.SAVE_DIR)
+          for d in [self.JOB_DIR, self.SAVE_DIR]:
+            if os.path.exists(d):
+              shutil.rmtree(d)
         elif option in ("--create-template"):
            self.create_breakit_template()
         elif option in ("--kill"):
