@@ -1,21 +1,4 @@
 #!/usr/bin/python
-#
-# Copyright (c) 2016 Contributors as noted in the AUTHORS file
-#
-# This file is part of breakit.
-
-#  breakit is free software: you can redistribute it and/or modify
-#  it under the terms of the GNU Lesser General Public License as published by
-#  the Free Software Foundation, either version 3 of the License, or
-#  (at your option) any later version.
-
-#  breakit is distributed in the hope that it will be useful,
-#  but WITHOUT ANY WARRANTY; without even the implied warranty of
-#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-#  GNU Lesser General Public License for more details.
-
-#  You should have received a copy of the GNU Lesser General Public License
-#  along with breakit.  If not, see <http://www.gnu.org/licenses/>.
 
 import glob,os,re
 import getopt, traceback
@@ -34,7 +17,7 @@ LOCK_EX = fcntl.LOCK_EX
 LOCK_SH = fcntl.LOCK_SH
 LOCK_NB = fcntl.LOCK_NB
 
-ENGINE_VERSION = '0.13'
+ENGINE_VERSION = '0.14'
 
 class LockException(Exception):
     # Error codes:
@@ -174,7 +157,7 @@ class engine:
 
       
    
-  def error_report(self,message = None, error_detail = "", exit=True):
+  def error_report(self,message = None, error_detail = "", exit=True,exception=False):
       """ helping message"""
       if message:
         message = str(message)+"\n"
@@ -199,6 +182,9 @@ class engine:
                \n\t\t[ --debug ] [ --debug-level=[0|1|2] ]  \
              \n"  % self.APPLICATION_NAME
 
+      if not(exception==False):
+        self.dump_exception()
+          
       if exit:
         sys.exit(1)
 

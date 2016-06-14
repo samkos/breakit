@@ -48,7 +48,7 @@ ERROR = -1
 
 class breakit(engine):
 
-  def __init__(self,engine_version=0.8,app_name='breakit'):
+  def __init__(self,engine_version=0.14,app_name='breakit'):
 
 
     self.WORKSPACE_FILE = "nodecheck.pickle"
@@ -363,7 +363,11 @@ class breakit(engine):
     self.log_debug("submitting : "+" ".join(cmd))
 
     if not self.DRY_RUN:
-      output = subprocess.check_output(cmd)
+      try:
+        output = subprocess.check_output(cmd)
+      except:
+        self.error_report("Something went wrong during the submission of the job",exit=True,exception=self.DEBUG)
+          
       if self.PBS:
         #print output.split("\n")
         job_id = output.split("\n")[0].split(".")[0]
@@ -707,7 +711,7 @@ class breakit(engine):
         self.RANGE = len(self.ARRAY)
         self.TO = int(self.RANGE)
 
-      self.log_info('RANGE=%s, ARRAY=%s' % ( self.RANGE,self.ARRAY))
+      self.log_debug('RANGE=%s, ARRAY=%s' % ( self.RANGE,self.ARRAY))
 
       if (self.ARRAY and self.RANGE and  not(int(self.RANGE) == len(self.ARRAY))):
         self.error_report(message='mismatch between --range=%s and --array-argument=%s ' % (self.RANGE,self.ARRAY) + \
