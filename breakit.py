@@ -41,6 +41,7 @@ import glob
 
 from engine import engine
 from env import *
+from ClusterShell.NodeSet import *
 
 ERROR = -1
 
@@ -55,7 +56,7 @@ class breakit(engine):
     self.CLEAN = False
     self.ALL = True
     self.APP_NAME  = app_name
-    self.VERSION = "0.1"
+    self.VERSION = "0.2"
     self.ENGINE_VERSION_REQUIRED = engine_version
       
     
@@ -106,12 +107,12 @@ class breakit(engine):
     
     self.log_info("my task is in charge of adding work...")
 
-    array_first = self.MY_TASK+self.CHUNK
-    if (array_first<self.TO):
+    range_first = self.MY_TASK+self.CHUNK
+    if (range_first<self.TO):
       self.log_info('can still submit... (%d-%d) dependent on %s' % \
-        (array_first,array_first+self.CHUNK/4-1,self.MY_JOB))
+        (range_first,range_first+self.CHUNK/4-1,self.MY_JOB))
       if self.CONTINUE:
-        self.job_array_submit("job.template", self.JOB_FILE_PATH, array_first,array_first+self.CHUNK/4-1,self.MY_JOB)
+        self.job_array_submit("job.template", self.JOB_FILE_PATH, range_first,range_first+self.CHUNK/4-1,self.MY_JOB)
         pickle.dump( self.JOB_ID, open(self.JOB_ID_FILE, "wb" ) )
 
   #########################################################################
@@ -327,11 +328,11 @@ class breakit(engine):
   # submit a job_array
   #########################################################################
 
-  def job_array_submit(self,job_name, job_file, array_first, array_last, dep=""):
+  def job_array_submit(self,job_name, job_file, range_first, range_last, dep=""):
 
-    array_last = min(array_last,self.TO)
+    range_last = min(range_last,self.TO)
 
-    if array_last < array_first:
+    if range_last < range_first:
       self.log_debug('no more job need to be submitted')
       sys.exit(0)
 
@@ -340,9 +341,9 @@ class breakit(engine):
     job_content = "".join(f.readlines())
     f.close()
 
-    job_content = job_content.replace("__ARRAY_CURRENT_FIRST__","%s" % array_first)
+    job_content = job_content.replace("__ARRAY_CURRENT_FIRST__","%s" % range_first)
 
-    job_file = '%s/job_template.%d-%d.job' % (self.SAVE_DIR,array_first,array_last)
+    job_file = '%s/job_template.%d-%d.job' % (self.SAVE_DIR,range_first,range_last)
     f=open(job_file,'w')
     f.write(job_content)
     f.close()
@@ -355,7 +356,7 @@ class breakit(engine):
     if self.NODES_FAILED:
       cmd = cmd + ["-x",self.NODES_FAILED]
 
-    cmd = cmd + [self.SCHED_ARR,"%d-%d" % (array_first,array_last),job_file ]
+    cmd = cmd + [self.SCHED_ARR,"%s" % self.ARRAY[range_first:range_last],job_file ]
 
       
     self.log_debug("submitting : "+" ".join(cmd))
@@ -380,7 +381,7 @@ class breakit(engine):
 
     self.JOB_ID[job_name] =  job_id
 
-    print 'submitting job %s Job # %s_%s-%s' % (job_name,job_id,array_first,array_last)
+    print 'submitting job %s Job # %s_%s-%s' % (job_name,job_id,range_first,range_last)
 
     return job_id
 
@@ -388,13 +389,13 @@ class breakit(engine):
   # submit a job
   #########################################################################
 
-  def job_submit(self,array_first,array_last):
+  def job_submit(self,range_first,range_last):
 
-    self.log_debug('submitting job array [%s,%s]...' % (array_first,array_last),1)
+    self.log_debug('submitting job array [%s,%s]...' % (range_first,range_last),1)
 
     job_template = self.create_job_template()
 
-    #job_name = "%d-%d-%%K" % (array_first,array_last)
+    #job_name = "%d-%d-%%K" % (range_first,range_last)
     job_name = "job_template"
     # job_dir = "%s/%03d" %  (self.JOB_DIR,n)
     # if os.path.exists(job_dir) and not (n+1 in self.JOBS_TO_RELAUNCH.keys()):
@@ -419,10 +420,10 @@ class breakit(engine):
     f.write(job_content)
     f.close()
 
-    for j in range(array_first,array_first+self.CHUNK,self.CHUNK/4):
+    for j in range(range_first,range_first+self.CHUNK,self.CHUNK/4):
       job_id=self.job_array_submit(job_name,job_file,j,j+self.CHUNK/4-1,dep)
 
-    self.log_debug('submitted job array [%s,%s] successfully...' % (array_first,array_last),1) 
+    self.log_debug('submitted job array [%s,%s] successfully...' % (range_first,range_last),1) 
 
 
 
@@ -455,14 +456,8 @@ class breakit(engine):
         if (nb_header_lines) == 0:
 
           finalize_cmd = "echo finalizing"
-          #finalize_cmd = "python -u ../../SAVE/%s.py --jobid=$job_id --taskid=$task_id --array-first=__ARRAY_CURRENT_FIRST__ --finalize --log-dir=%s --range=%s --job_file=%s" % \
-          #               (self.APP_NAME,self.LOG_DIR,self.RANGE,job_file_path)
-
           job = job + self.job_header_amend()
-          #job = job + "mkdir -p %s/$task_id\n\n" % self.JOB_DIR
-          #job = job + "cd %s/$task_id \n\n" % self.JOB_DIR
-          #job = job + "python -u ../../SAVE/%s.py  --jobid=$job_id  --taskid=$task_id --array-first=__ARRAY_CURRENT_FIRST__ --continue --log-dir=%s --range=%s  --job_file=%s" % \
-          #    (self.APP_NAME,self.LOG_DIR,self.RANGE,job_file_path)
+
           job = job + "python -u %s/breakit.py  --jobid=$job_id  --taskid=$task_id --array-first=__ARRAY_CURRENT_FIRST__ --continue --log-dir=%s --range=%s  --chunk=%s --job_file=%s" % \
               (self.BREAKIT_DIR,self.LOG_DIR,self.RANGE,self.CHUNK,job_file_path)
 
@@ -582,7 +577,7 @@ class breakit(engine):
       else:
         print ("\n  usage: \n \t python  %s.py " + \
                "\n\t\t  --job=<Slurm job_script file> " + \
-               "\n\t\t  --range=<total number of jobs to submit> " + \
+               "\n\t\t  [ --range=<total number of jobs to submit> | --array=<array indices> ] " + \
                "\n\t\t[ --chunk=<maximum number of jobs to queue simultaneously> ] " + \
                "\n\t\t[ --help ] " + \
             " \n" )  % self.APP_NAME
@@ -607,7 +602,7 @@ class breakit(engine):
       self.JOB = None
       self.PBS = None
       self.DRY_RUN = False
-      self.RANGE = False
+      self.RANGE = self.ARRAY = False
       self.MY_TASK = -1
       self.MY_JOB = -1
       self.CHUNK = 8
@@ -622,7 +617,7 @@ class breakit(engine):
             self.error_report("")
 
           opts, args = getopt.getopt(args, "h", 
-                            ["help", "job=", "range=", "chunk=", \
+                            ["help", "job=", "range=", "array=", "chunk=", \
                              "exclude_nodes=","dry", "create-template", \
                              "restart", "scratch", "kill", "continue", "continuex", \
                              "log-dir=","taskid=", "jobid=", "array-first=", "job_file_path=", \
@@ -681,6 +676,8 @@ class breakit(engine):
           self.CONTINUEX = 1
         elif option in ("--chunk"):
           self.CHUNK = int(argument)
+        elif option in ("--array"):
+          self.ARRAY = RangeSet(argument)
         elif option in ("--range"):
           self.RANGE = argument
           self.TO = int(self.RANGE)
@@ -694,7 +691,7 @@ class breakit(engine):
           self.MY_TASK = int(argument)
         elif option in ("--jobid"):
           self.MY_JOB = argument
-        elif option in ("--array-first"):
+        elif option in ("--range-first"):
           self.MY_ARRAY_CURRENT_FIRST = int(argument)
         elif option in ("--job_file_path"):
           self.JOB_FILE_PATH = argument          
@@ -702,12 +699,28 @@ class breakit(engine):
       if not(self.JOB) and not(self.CONTINUE or self.CONTINUEX):
         self.error_report(message='please set a job to launch with the option --job=<job file>')
 
+      if (self.RANGE and not(self.ARRAY)):
+        self.ARRAY = RangeSet("1-%s" , self.RANGE)
+
+      if (self.ARRAY and not(self.RANGE)):
+        self.RANGE = len(self.ARRAY)
+        self.TO = int(self.RANGE)
+
+      if (self.ARRAY and self.RANGE and  not(self.RANGE == len(self.ARRAY))):
+        self.error_report(message='mismatch between --range and --array-argument ' + \
+                                 '\n  - range should be equal of the number of array-indices')
+
+      print self.RANGE,self.ARRAY
       if not(self.RANGE) and not(self.CONTINUE or self.CONTINUEX):
         self.error_report(message='please set ' + \
                                  '\n  - a range for your job with the option ' + \
                                  '\n           --range=<total number of the jobs in the array> ' + \
                                  '\n  - the number of jobs you want in the queue with the option' + \
                                  '\n           --chunk=<maximum number of jobs to queued simultaneously>')
+
+
+          
+
 
       self.log_info('starting Task %s' % self.MY_TASK,1)
 
