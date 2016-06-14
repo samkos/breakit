@@ -1,6 +1,8 @@
 #
 # Copyright (c) 2016 Contributors as noted in the AUTHORS file
 #
+#  Written by Samuel Kortas <samuel.kortas (at) kaust.edu.sa>,
+#
 
 # This file is part of breakit.
 
@@ -109,9 +111,9 @@ class breakit(engine):
     self.log_info("my task is in charge of adding work...")
 
     range_first = self.MY_ARRAY_CURRENT_FIRST+self.CHUNK
-    if (range_first<self.TO):
+    if (range_first<=self.TO):
       self.log_info('can still submit... (%d-%d) dependent on %s' % \
-        (range_first,range_first+self.CHUNK/4-1,self.MY_JOB))
+        (range_first,min(range_first+self.CHUNK/4-1,self.TO),self.MY_JOB))
       if self.CONTINUE:
         self.job_array_submit("job.template", self.JOB_FILE_PATH, range_first,range_first+self.CHUNK/4-1,self.MY_JOB)
         pickle.dump( self.JOB_ID, open(self.JOB_ID_FILE, "wb" ) )
@@ -463,8 +465,9 @@ class breakit(engine):
           finalize_cmd = "echo finalizing"
           job = job + self.job_header_amend()
 
-          job = job + "python -u %s/breakit.py  --jobid=$job_id  --taskid=$task_id --range-first=__ARRAY_CURRENT_FIRST__ --continue --log-dir=%s --range=%s --array=%s --chunk=%s --job_file=%s" % \
-              (self.BREAKIT_DIR,self.LOG_DIR,self.RANGE,self.ARRAY,self.CHUNK,job_file_path)
+          job = job + "%s -u %s  --jobid=$job_id  --taskid=$task_id --range-first=__ARRAY_CURRENT_FIRST__ --continue --log-dir=%s --range=%s --array=%s --chunk=%s --job_file=%s" % \
+              (sys.executable,os.path.realpath(__file__),
+               self.LOG_DIR,self.RANGE,self.ARRAY,self.CHUNK,job_file_path)
 
           if self.FAKE:
             job = job + " --fake"
@@ -680,7 +683,9 @@ class breakit(engine):
         elif option in ("--continuex"):
           self.CONTINUEX = 1
         elif option in ("--chunk"):
-          self.CHUNK = int(argument)
+          chunk = max(int(argument),8)
+          chunk = (chunk/4)*4
+          self.CHUNK = chunk
         elif option in ("--array"):
           self.ARRAY = RangeSet(argument)
         elif option in ("--range"):

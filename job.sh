@@ -1,8 +1,8 @@
 #!/bin/bash
 
 #SBATCH --job-name=arrayJob
-#SBATCH --output=arrayJob_%A_%a.out
-#SBATCH --error=arrayJob_%A_%a.err
+#SBATCH --output=arrayJob_%a_%A.out
+#SBATCH --error=arrayJob_%a_%A.err
 #SBATCH --time=00:01:00
 #SBATCH --ntasks=1
 
@@ -13,6 +13,7 @@
 
 # Print this sub-job's task ID
 echo "My SLURM_ARRAY_TASK_ID: " $SLURM_ARRAY_TASK_ID
+#sleep 1
 
 # Do some work based on the SLURM_ARRAY_TASK_ID
 # For example: 

@@ -2,6 +2,9 @@
 #
 # Copyright (c) 2016 Contributors as noted in the AUTHORS file
 #
+#
+#  Written by Samuel Kortas <samuel.kortas (at) kaust.edu.sa>,
+#
 # This file is part of breakit.
 
 #  breakit is free software: you can redistribute it and/or modify
