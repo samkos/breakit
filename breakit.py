@@ -578,9 +578,9 @@ class breakit(engine):
       else:
         print ("\n  usage: \n \t python  %s.py " + \
                "\n\t\t  --job=<Slurm job_script file> " + \
-               "\n\t\t  [ --range=<total number of jobs to submit> | --array=<array indices> ] " + \
-               "\n\t\t[ --chunk=<maximum number of jobs to queue simultaneously> ] " + \
-               "\n\t\t[ --help ] " + \
+               "\n\t\t  --array=<array indexes>       [ | --range=<total number of jobs to submit> ] " + \
+               "\n\t\t  [ --chunk=<maximum number of jobs to queue simultaneously> ] " + \
+               "\n\t\t  [ --help ] " + \
             " \n" )  % self.APP_NAME
                # \n\t\t[ --exclude_nodes=<nodes where not to run> ] \
                # \n\t\t[ --restart | --scratch | --kill ]\
@@ -707,15 +707,20 @@ class breakit(engine):
         self.RANGE = len(self.ARRAY)
         self.TO = int(self.RANGE)
 
+      self.log_info('RANGE=%s, ARRAY=%s' % ( self.RANGE,self.ARRAY))
+
       if (self.ARRAY and self.RANGE and  not(int(self.RANGE) == len(self.ARRAY))):
         self.error_report(message='mismatch between --range=%s and --array-argument=%s ' % (self.RANGE,self.ARRAY) + \
-                                 '\n  - range should be equal of the number of array-indices: %s' % len(self.ARRAY))
+                                 '\n  - range should be equal of the number of array-indexes: %s' % len(self.ARRAY))
 
-      print self.RANGE,self.ARRAY
+      
       if not(self.RANGE) and not(self.CONTINUE or self.CONTINUEX):
         self.error_report(message='please set ' + \
                                  '\n  - a range for your job with the option ' + \
+                                 '\n           --array=<array-indexes> ' + \
+                                 '\n        or ' + \
                                  '\n           --range=<total number of the jobs in the array> ' + \
+                                 '\n         ' + \
                                  '\n  - the number of jobs you want in the queue with the option' + \
                                  '\n           --chunk=<maximum number of jobs to queued simultaneously>')
 

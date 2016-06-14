@@ -1,4 +1,4 @@
-.TH breakit 1  "June 5, 2016" "version 0.1" "USER COMMANDS"
+.TH breakit 1  "June 14, 2016" "version 0.2" "USER COMMANDS"
 .SH NAME
 breakit \- KSL many jobs automated submitter
 .
@@ -6,7 +6,7 @@ breakit \- KSL many jobs automated submitter
 .SH SYNOPSIS
 .IX Header "SYNOPSIS"
 breakit  \fB\-\-job=\fR\fIany-Slurm-Job\fR
-         \fB\-\-range=\fR\fITotal-number-of-jobs-to-submit\fR
+         \fB\-\-array=\fR\fIarray-indexes\fR [or \fB\-\-range=\fR\fITotal-number-of-jobs\fR]
          [\fB\-\-chunk\fR=\fR\fIMaximum-number-of-jobs-to-be-seen-in-the-queue\fR]
 .
 .
@@ -27,7 +27,7 @@ Not a single modification needs to be made to the Slurm job it self.
 Let assume 1000 occcurences of "\fImy_job\fR" needs to be submitted, the
 command:
 .PP
-.BI "   breakit \-\-job=\fImy-job\fR \-\-range=\fI1000\fR \-\-chunk=\fI20\fR"
+.BI "   breakit \-\-job=\fImy-job\fR \-\-array=\fI1-1000\fR \-\-chunk=\fI20\fR"
 .PP
 will submit the 1000 jobs to shaheen II in several chunks of 20
 jobs. At a time, no more than 20 jobs will appear in the queue. In
@@ -35,9 +35,13 @@ reality, \fBbreakit\fR will use job dependency to automate the ongoing
 submission of the remaining jobs. These batches of 20 jobs will be
 seen as successive job arrays in the scheduling queue.
 .PP
-If no option --chunk is mentionned, default number of jobs queued simultaneously is set to 8.
+The \fB--array\fR option accept the same type of input as the sbatch command.
 .PP
-To cancel the full set of jobs, an option --kill is under development
+If no option \fB--chunk\fR is mentionned, default number of jobs queued simultaneously is set to 8.
+.PP
+The option \fB--range\fR is present to insure backward compatibility with breakit 0.1:  --range=100 is strictly equivalent to --array=1-100.
+.PP
+To cancel the full set of jobs, an option \fB--kill\fR is under development
 and testing. In the meantime, when choosing a different name for all the jobs launched through \fBbreakit\fR
 the following Slurm command can be used:
 .PP
