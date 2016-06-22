@@ -104,7 +104,7 @@ class breakit(engine):
     
     self.parser.add_argument("--go-on", action="store_true", help=argparse.SUPPRESS)
     self.parser.add_argument("--jobid", type=int ,  help=argparse.SUPPRESS)
-    self.parser.add_argument("--job-file-path", type=int , help=argparse.SUPPRESS)
+    self.parser.add_argument("--job-file-path", type=str , help=argparse.SUPPRESS)
     self.parser.add_argument("--taskid", type=int ,  help=argparse.SUPPRESS)
     self.parser.add_argument("--array-current-first", type=int , help=argparse.SUPPRESS)
 
@@ -159,9 +159,9 @@ class breakit(engine):
 
     if (range_first<=self.TO):
       self.log_info('can still submit... (%d-%d) dependent on %s' % \
-        (range_first,min(range_first+self.args.chunk/4-1,self.TO),self.MY_JOB))
+        (range_first,min(range_first+self.args.chunk/4-1,self.TO),self.args.jobid))
       if self.args.go_on:
-        self.job_array_submit("job.template", self.args.job_file_path, range_first,range_first+self.args.chunk/4-1,self.MY_JOB)
+        self.job_array_submit("job.template", self.args.job_file_path, range_first,range_first+self.args.chunk/4-1,self.args.jobid)
         pickle.dump( self.JOB_ID, open(self.JOB_ID_FILE, "wb" ) )
 
   #########################################################################
@@ -460,9 +460,9 @@ class breakit(engine):
           finalize_cmd = "echo finalizing"
           job = job + self.job_header_amend()
 
-          job = job + "%s -u %s  --jobid=$job_id  --taskid=$task_id --array-current-first=__ARRAY_CURRENT_FIRST__ --go-on --log-dir=%s  --array=%s --chunk=%s --job_file=%s %s %s" % \
+          job = job + "%s -u %s  --jobid=$job_id  --taskid=$task_id --array-current-first=__ARRAY_CURRENT_FIRST__ --go-on --log-dir=%s  --array=%s --chunk=%s --job-file-path=%s %s %s %s" % \
               (sys.executable,os.path.realpath(__file__),
-               self.LOG_DIR,self.ARRAY,self.args.chunk,job_file_path, "-d "*self.args.debug,"-i "*self.args.info)
+               self.LOG_DIR,self.ARRAY,self.args.chunk,job_file_path, self.args.job,"-d "*self.args.debug,"-i "*self.args.info)
 
           if self.args.fake:
             job = job + " --fake"
