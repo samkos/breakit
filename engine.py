@@ -1,24 +1,4 @@
 #!/usr/bin/python
-#
-# Copyright (c) 2016 Contributors as noted in the AUTHORS file
-#
-#
-#  Written by Samuel Kortas <samuel.kortas (at) kaust.edu.sa>,
-#
-# This file is part of breakit.
-
-#  breakit is free software: you can redistribute it and/or modify
-#  it under the terms of the GNU Lesser General Public License as published by
-#  the Free Software Foundation, either version 3 of the License, or
-#  (at your option) any later version.
-
-#  breakit is distributed in the hope that it will be useful,
-#  but WITHOUT ANY WARRANTY; without even the implied warranty of
-#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-#  GNU Lesser General Public License for more details.
-
-#  You should have received a copy of the GNU Lesser General Public License
-#  along with breakit.  If not, see <http://www.gnu.org/licenses/>.
 
 import glob,os,re
 import getopt, traceback
@@ -32,6 +12,8 @@ from os.path import expanduser
 from env     import *
 import fcntl
 import getpass
+
+import argparse
 
 LOCK_EX = fcntl.LOCK_EX
 LOCK_SH = fcntl.LOCK_SH
@@ -59,40 +41,118 @@ class engine:
     self.APPLICATION_VERSION=app_version
     self.ENGINE_VERSION=ENGINE_VERSION
 
+    self.LOG_PREFIX=""
+    self.LOG_DIR = app_dir_log
+   
+    self.WORKSPACE_FILE = ".%s.pickle" % app_name
+    self.JOB_DIR = os.path.abspath("./.%s/RESULTS" % app_name)
+    self.SAVE_DIR = os.path.abspath("./.%s/SAVE" % app_name)
+    self.LOG_DIR = os.path.abspath("./.%s/LOGS" % app_name)
+
+
+    # saving scheduling option in the object
+    
     self.MAIL_COMMAND = MAIL_COMMAND
     self.SUBMIT_COMMAND = SUBMIT_COMMAND
     self.SCHED_TYPE = SCHED_TYPE
     self.DEFAULT_QUEUE = DEFAULT_QUEUE
     
-    self.DEBUG=False
-    self.INFO=0
 
-    self.LOG_PREFIX=""
+    # initilization
     
-    if not(app_dir_log):
-      app_dir_log = "/scratch/%s/logs/.%s" % (getpass.getuser(),self.APPLICATION_NAME)
-    self.LOG_DIR = expanduser("%s" % app_dir_log)
-   
-    self.log = False
-
     self.welcome_message()
 
+    # checking
     self.check_python_version()
     self.check_engine_version(engine_version_required)
-      
 
-    if not(self.parse()):
-      sys.exit(1)
+    # parse command line to eventually overload some default values
+    self.parser = argparse.ArgumentParser()
+    self.initialize_parser()
+    self.args = self.parser.parse_args()
+
+    
+    # initialize logs
+    self.initialize_log_files()
+
+    # initialize scheduler
+    self.initialize_scheduler()
 
 
+    self.env_init()
+    
+  def start(self):
 
+    self.log_debug('[Engine:start] entering')
+    engine.run(self)
+
+
+  #########################################################################
+  # check for tne option on the command line
+  #########################################################################
+
+
+  def initialize_parser(self):
+    self.parser.add_argument("-i","--info",  action="count", default=0, help=argparse.SUPPRESS)
+    self.parser.add_argument("-d","--debug", action="count", default=0, help=argparse.SUPPRESS)
+
+    # self.parser.add_argument("--kill", action="store_true", help="Killing all processes")
+    # self.parser.add_argument("--scratch", action="store_true", help="Restarting the whole process from scratch cleaning everything")
+    # self.parser.add_argument("--restart", action="store_true", help="Restarting the process from where it stopped")
+
+    self.parser.add_argument("--kill", action="store_true", help=argparse.SUPPRESS)
+    self.parser.add_argument("--scratch", action="store_true", help=argparse.SUPPRESS)
+    self.parser.add_argument("--restart", action="store_true", help=argparse.SUPPRESS)
+
+    self.parser.add_argument("--log-dir", type=str, help=argparse.SUPPRESS)
+    self.parser.add_argument("--mail", type=str, help=argparse.SUPPRESS)
+    self.parser.add_argument("--fake", action="store_true", help=argparse.SUPPRESS)
+    self.parser.add_argument("--dry", action="store_true", help=argparse.SUPPRESS)
+    self.parser.add_argument("--pbs", action="store_true", help=argparse.SUPPRESS)
+    self.parser.add_argument("-x","--exclude-nodes", type=str , help=argparse.SUPPRESS)
+    self.parser.add_argument("--reservation", type=str , help='SLURM reservation')
+    self.parser.add_argument("-p","--partition", type=str , help='SLURM partition')
+        
+
+  #########################################################################
+  # main router
+  #########################################################################
+
+  def run(self):
+
+    if self.args.info>0:
+        self.log.setLevel(logging.INFO)
+    if self.args.debug>0:
+        self.log.setLevel(logging.DEBUG)
+
+    if self.args.scratch:
+        self.log_info("restart from scratch")
+        self.log_info("killing previous jobs...")
+        self.kill_jobs()
+        self.log_info("deleting JOBS and SAVE DIR")
+        shutil.rmtree(self.JOB_DIR)
+        shutil.rmtree(self.SAVE_DIR)
+                                    
+    if self.args.kill:
+        self.kill_jobs()
+        sys.exit(0)
+        
   #########################################################################
   # set self.log file
   #########################################################################
 
 
   def initialize_log_files(self):
+      
+    if not(self.LOG_DIR):
+      self.LOG_DIR= "/scratch/%s/logs/.%s" % (getpass.getuser(),self.APPLICATION_NAME)
 
+
+    if self.args.log_dir:
+        self.LOG_DIR = self.args.log_dir
+
+    self.LOG_DIR = expanduser("%s" % self.LOG_DIR)
+    
     for d in [ self.LOG_DIR]:
       if not(os.path.exists(d)):
         os.makedirs(d)
@@ -120,22 +180,22 @@ class engine:
 
 
   def log_debug(self,msg,level=0,dump_exception=0):
-    if level<=self.DEBUG:
+    if level<=self.args.debug:
       if len(self.LOG_PREFIX):
           msg = "%s:%s" % (self.LOG_PREFIX,msg)
       self.log.debug(msg)
       if (dump_exception):
         self.dump_exception()
-      #self.log.debug("%d:%d:%s"%(self.DEBUG,level,msg))
+      #self.log.debug("%d:%d:%s"%(self.args.debug,level,msg))
 
   def log_info(self,msg,level=0,dump_exception=0):
-    if level<=self.INFO:
+    if level<=self.args.info:
       if len(self.LOG_PREFIX):
           msg = "%s:%s" % (self.LOG_PREFIX,msg)
       self.log.info(msg)
       if (dump_exception):
         self.dump_exception()
-      #self.log.debug("%d:%d:%s"%(self.DEBUG,level,msg))
+      #self.log.debug("%d:%d:%s"%(self.args.debug,level,msg))
 
   def dump_exception(self,where=None):
     if where:
@@ -149,6 +209,53 @@ class engine:
   def set_log_prefix(self,prefix):
       self.LOG_PREFIX = prefix
     
+  #########################################################################
+  # initialize job environment
+  #########################################################################
+
+  def env_init(self):
+
+    self.log_debug('initialize environment ',1)
+
+    for d in [self.SAVE_DIR,self.LOG_DIR]:
+      if not(os.path.exists(d)):
+        os.makedirs(d)
+        self.log_debug("creating directory "+d,1)
+    
+    for f in glob.glob("*.py"):
+      self.log_debug("copying file %s into SAVE directory " % f,1)
+      os.system("cp ./%s  %s" % (f,self.SAVE_DIR))
+
+    # for f in self.FILES_TO_COPY:
+    #   os.system("cp %s/%s %s/" % (self.INITIAL_DATA_DIR,f,self.JOB_DIR_0))
+
+    self.log_info('environment initialized successfully',1)
+
+  #########################################################################
+  # initialize_scheduler
+  #########################################################################
+  def initialize_scheduler(self):
+    global SCHED_TYPE
+
+    if SCHED_TYPE=="pbs" or self.args.pbs:
+      self.PBS = True
+      self.SCHED_TAG = "#PBS"
+      self.SCHED_SUB = "qsub"
+      self.SCHED_ARR = "-t"
+      self.SCHED_KIL = "qdel"
+      self.SCHED_Q = "qstat"
+      self.SCHED_DEP = "-W depend=afteranyarray"
+    else:
+      self.SCHED_TAG = "#SBATCH"
+      self.SCHED_SUB = "sbatch"
+      self.SCHED_ARR = "-a"
+      self.SCHED_KIL = "scancel"
+      self.SCHED_Q = "squeue"
+      self.SCHED_DEP = "--dependency=afterany"
+      self.SCHED_DEP_OK = "--dependency=afterok"
+      self.SCHED_DEP_NOK = "--dependency=afternotok"
+
+
   #########################################################################
   # welcome message
   #########################################################################
@@ -225,56 +332,9 @@ class engine:
         self.error_report("Current Engine version is %s while requiring %s, please fix it!" % (current,asked))
 
 
-
   #########################################################################
-  # parsing command line
+  # locking methods
   #########################################################################
-
-  def parse(self,args=sys.argv[1:]):
-      """ parse the command line and set global _flags according to it """
-
-      try:
-          if " --help" in " "+" ".join(args) or " -h " in (" "+" ".join(args)+" ") :
-            self.error_report("")
-
-          opts, args = getopt.getopt(args, "h", 
-                            ["help", "debug", "debug-level=", \
-                                      "info", "info-level=", "log-dir=" ])    
-      except getopt.GetoptError, err:
-          # print help information and exit:
-          self.error_report(err)
-
-
-      for option, argument in opts:
-        if option in ("--log-dir"):
-          self.LOG_DIR = expanduser(argument)
-
-      # initialize Logs
-      self.initialize_log_files()
-
-      self.log_info("\tprocessing ...",2)
-      self.log_info("\t\t" + " ".join(sys.argv),2)
-
-      for option, argument in opts:
-        if option in ("--info"):
-          self.INFO = 1
-          self.log.setLevel(logging.INFO)
-        elif option in ("--info-level"):
-          self.INFO = int(argument)
-          self.log.setLevel(logging.INFO)
-
-      for option, argument in opts:
-        if option in ("--debug"):
-          self.DEBUG = 0
-          self.log.setLevel(logging.DEBUG)
-        elif option in ("--debug-level"):
-          self.DEBUG = int(argument)
-          self.log.setLevel(logging.DEBUG)
-
-
-      self.log_debug('Parse successfully exited',2)
-      return True
-
 
   def lock(self, file, flags):
       try:
@@ -306,7 +366,8 @@ class engine:
 
     self.log_debug("\tcurrently executing /%s/ :\n\t\t%s" % (comment,cmd))
 
-    if not(fake) and not(self.FAKE):
+    output='FAKE EXECUTION'
+    if not(fake) and not(self.args.fake):
       #os.system(cmd)
       #subprocess.call(cmd,shell=True,stderr=subprocess.STDOUT)
       proc = subprocess.Popen(cmd, shell=True, bufsize=1, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
@@ -328,17 +389,17 @@ class engine:
 
   def init_mail(self):
 
-    if not(self.MAIL):
+    if not(self.args.mail):
       return False
     
     # sendmail only works from a node on shaheen 2 via an ssh connection to cdl via gateway...
 
-    if not(self.MAIL_TO):
-      self.MAIL_TO = getpass.getuser()
+    if not(self.args.mail_TO):
+      self.args.mail_TO = getpass.getuser()
 
   def send_mail(self,title,msg,to=None):
 
-    if not(self.MAIL):
+    if not(self.args.mail):
       return False
 
     if not(self.MAIL_COMMAND):
@@ -353,10 +414,10 @@ class engine:
     f.close()
 
     if not(to):
-        to = self.MAIL_TO
+        to = self.args.mail_TO
         
     cmd = (self.MAIL_COMMAND+"2> /dev/null") % (title, to, mail_file)
-    self.log_debug("self.MAIL cmd : "+cmd,2)
+    self.log_debug("self.args.mail cmd : "+cmd,2)
     os.system(cmd)
 
 
