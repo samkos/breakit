@@ -1,8 +1,8 @@
 #!/bin/bash
 
 #SBATCH --job-name=arrayJob
-#SBATCH --output=arrayJob_%a_%A.out
-#SBATCH --error=arrayJob_%a_%A.err
+#SBATCH --output=arrayJob_%a.out
+#SBATCH --error=arrayJob_%a.err
 #SBATCH --time=00:01:00
 #SBATCH --ntasks=1
 

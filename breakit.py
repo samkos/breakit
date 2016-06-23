@@ -58,7 +58,7 @@ class breakit(engine):
     self.WORKSPACE_FILE = "nodecheck.pickle"
 
     self.APP_NAME  = app_name
-    self.VERSION = "0.2"
+    self.VERSION = "0.3"
     self.ENGINE_VERSION_REQUIRED = engine_version
 
     engine.__init__(self,self.APP_NAME,self.VERSION,engine_version_required=self.ENGINE_VERSION_REQUIRED)
@@ -99,8 +99,8 @@ class breakit(engine):
     engine.initialize_parser(self)
 
     self.parser.add_argument("-a","--array", type=str , help="Array indexes")
-    self.parser.add_argument("--chunk", type=int , help="maximum number of jobs to queue simultaneously", default=8)
-    self.parser.add_argument("job", type=str , help="Slurm Job script")
+    self.parser.add_argument("-c","--chunk", type=int , help="maximum number of jobs to queue simultaneously", default=8)
+    self.parser.add_argument("-j","--job", type=str , help="Slurm Job script")
     
     self.parser.add_argument("--go-on", action="store_true", help=argparse.SUPPRESS)
     self.parser.add_argument("--jobid", type=int ,  help=argparse.SUPPRESS)
@@ -161,7 +161,10 @@ class breakit(engine):
       self.log_info('can still submit... (%d-%d) dependent on %s' % \
         (range_first,min(range_first+self.args.chunk/4-1,self.TO),self.args.jobid))
       if self.args.go_on:
-        self.job_array_submit("job.template", self.args.job_file_path, range_first,range_first+self.args.chunk/4-1,self.args.jobid)
+        self.job_array_submit("job.template", self.args.job_file_path,
+                              range_first=range_first,
+                              range_last=range_first+self.args.chunk/4-1,
+                              dep=self.args.jobid)
         pickle.dump( self.JOB_ID, open(self.JOB_ID_FILE, "wb" ) )
 
   #########################################################################
@@ -460,9 +463,10 @@ class breakit(engine):
           finalize_cmd = "echo finalizing"
           job = job + self.job_header_amend()
 
-          job = job + "%s -u %s  --jobid=$job_id  --taskid=$task_id --array-current-first=__ARRAY_CURRENT_FIRST__ --go-on --log-dir=%s  --array=%s --chunk=%s --job-file-path=%s %s %s %s" % \
-              (sys.executable,os.path.realpath(__file__),
-               self.LOG_DIR,self.ARRAY,self.args.chunk,job_file_path, self.args.job,"-d "*self.args.debug,"-i "*self.args.info)
+          job = job + "%s -u %s  --jobid=$job_id  --taskid=$task_id --array-current-first=__ARRAY_CURRENT_FIRST__ " % \
+                (sys.executable,os.path.realpath(__file__)) +\
+                "--go-on --log-dir=%s  --array=%s --chunk=%s --job-file-path=%s --job %s %s %s" % \
+              (   self.LOG_DIR,self.ARRAY,self.args.chunk,job_file_path, self.args.job,"-d "*self.args.debug,"-i "*self.args.info)
 
           if self.args.fake:
             job = job + " --fake"
