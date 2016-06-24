@@ -103,6 +103,7 @@ class breakit(engine):
     self.parser.add_argument("-j","--job", type=str , help="Slurm Job script")
     
     self.parser.add_argument("--go-on", action="store_true", help=argparse.SUPPRESS)
+    self.parser.add_argument("--finalize", action="store_true", help=argparse.SUPPRESS)
     self.parser.add_argument("--jobid", type=int ,  help=argparse.SUPPRESS)
     self.parser.add_argument("--job-file-path", type=str , help=argparse.SUPPRESS)
     self.parser.add_argument("--taskid", type=int ,  help=argparse.SUPPRESS)
@@ -132,6 +133,10 @@ class breakit(engine):
     
     
     self.log_info('starting Task %s' % self.args.taskid,1)
+
+    if self.args.finalize:
+      self.log_info('FINALIZING... task %s' % self.args.taskid)
+      sys.exit(0)
 
     if not(self.args.go_on):
       self.prepare_computation()
@@ -357,6 +362,12 @@ class breakit(engine):
     if self.args.exclude_nodes:
       cmd = cmd + ["-x",self.args.excludes_nodes]
 
+    if self.args.partition:
+      cmd = cmd + ["--partition=%s" % self.args.partition]
+
+    if self.args.reservation:
+      cmd = cmd + ["--reservation=%s" % self.args.reservation]
+
     cmd = cmd + [self.SCHED_ARR,"%s" % self.ARRAY[(range_first-1):range_last],job_file ]
 
       
@@ -366,7 +377,7 @@ class breakit(engine):
       try:
         output = subprocess.check_output(cmd)
       except:
-        self.error_report("Something went wrong during the submission of the job",exit=True,exception=self.DEBUG)
+        self.error_report("Something went wrong during the submission of the job",exit=True,exception=self.args.debug)
           
       if self.args.pbs:
         #print output.split("\n")
@@ -463,27 +474,37 @@ class breakit(engine):
           finalize_cmd = "echo finalizing"
           job = job + self.job_header_amend()
 
-          job = job + "%s -u %s  --jobid=$job_id  --taskid=$task_id --array-current-first=__ARRAY_CURRENT_FIRST__ " % \
+          script = "%s -u %s  --jobid=$job_id  --taskid=$task_id --array-current-first=__ARRAY_CURRENT_FIRST__ " % \
                 (sys.executable,os.path.realpath(__file__)) +\
                 "--go-on --log-dir=%s  --array=%s --chunk=%s --job-file-path=%s --job %s %s %s" % \
               (   self.LOG_DIR,self.ARRAY,self.args.chunk,job_file_path, self.args.job,"-d "*self.args.debug,"-i "*self.args.info)
 
           if self.args.fake:
-            job = job + " --fake"
-            finalize_cmd = finalize_cmd + " --fake"
+            script = script + " --fake"
           if self.args.pbs:
-            job = job + " --pbs"
-            finalize_cmd = finalize_cmd + " --pbs"
+            script = script + " --pbs"
+
+          job = job + script
+          finalize_cmd  = finalize_cmd + "\n" + script+" --finalize"
+          
           job = job + "\n"
           job = job + """
               if [ $? -ne 0 ] ; then
                   echo "[ERROR] FAILED in Job: stopping everything..."
                   %s 
                   exit 1
-              else """ % finalize_cmd
+              else \n """ + finalize_cmd
           job = job + "\n# START OF ORIGINAL USER SCRIPT  -------------------\n"
 
     job = job + "\n# END OF ORIGINAL USER SCRIPT  -------------------\n"
+    job = job + """
+                result_job=$?
+                if [ $result_job -ne 0 ] ; then
+                   echo Job failed with a non zeroexit value
+                   exit $result_job
+                fi
+
+"""
     job = job + finalize_cmd 
     job = job+ """
               fi """
