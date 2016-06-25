@@ -104,6 +104,7 @@ class breakit(engine):
     
     self.parser.add_argument("--go-on", action="store_true", help=argparse.SUPPRESS)
     self.parser.add_argument("--finalize", action="store_true", help=argparse.SUPPRESS)
+    self.parser.add_argument("--exit-code", type=int , default=0,  help=argparse.SUPPRESS)
     self.parser.add_argument("--jobid", type=int ,  help=argparse.SUPPRESS)
     self.parser.add_argument("--job-file-path", type=str , help=argparse.SUPPRESS)
     self.parser.add_argument("--taskid", type=int ,  help=argparse.SUPPRESS)
@@ -135,7 +136,7 @@ class breakit(engine):
     self.log_info('starting Task %s' % self.args.taskid,1)
 
     if self.args.finalize:
-      self.log_info('FINALIZING... task %s' % self.args.taskid)
+      self.finalize()
       sys.exit(0)
 
     if not(self.args.go_on):
@@ -145,6 +146,24 @@ class breakit(engine):
       pickle.dump( self.JOB_ID, open(self.JOB_ID_FILE, "wb" ) )
     else:
       self.manage_jobs()
+
+
+  #########################################################################
+  # finalizing task
+  #########################################################################
+  def finalize(self):
+    #
+    self.log_info('FINALIZING... task %s -> %s ' % (self.args.taskid,self.args.exit_code))
+    status = 'OK'
+    if self.args.exit_code:
+      status = 'NOK'
+    filename = '%s/%s.%s-%s-%s' % (self.SAVE_DIR,status,self.args.taskid,\
+                                   self.args.jobid,self.args.exit_code)
+    self.log_debug('touching stub file %s' % filename,1)
+    f = open(filename,'w')
+    f.close()
+    time.sleep(1)
+    
       
   #########################################################################
   # manage_jobs()
@@ -501,12 +520,14 @@ class breakit(engine):
                 result_job=$?
                 if [ $result_job -ne 0 ] ; then
                    echo Job failed with a non zeroexit value
+                   %s --exit-code $result_job
                    exit $result_job
-                fi
+                else
 
-"""
+"""             % (finalize_cmd)
     job = job + finalize_cmd 
     job = job+ """
+                fi
               fi """
     job = job + "\n"
 
