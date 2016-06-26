@@ -14,6 +14,12 @@ import fcntl
 import getpass
 import pickle
 import argparse
+from ClusterShell.NodeSet import *
+
+JOB_POSSIBLE_STATES = ('PENDING','RUNNING','SUSPENDED','COMPLETED',\
+                       'CANCELLED','CANCELLED+','FAILED','TIMEOUT',\
+                       'NODE_FAIL','PREEMPTED','BOOT_FAIL','COMPLETING',\
+                       'CONFIGURING','RESIZING','SPECIAL_EXIT')
 
 LOCK_EX = fcntl.LOCK_EX
 LOCK_SH = fcntl.LOCK_SH
@@ -334,8 +340,16 @@ class engine:
         self.JOB[step_before]['comes_before'] = self.JOB[self.JOB[step_before]['job_id']]['comes_before'] =  job_id
         self.JOB[step_before]['make_depend'] = self.JOB[self.JOB[step_before]['job_id']]['make_depend'] =  job_id
 
-    self.JOB[job_id] = self.JOB[job['name']] = job
+    # self.JOB[job_id] = self.JOB[job['name']] = job
+    # self.JOB_WORKDIR[job_id]  =   os.getcwd()
+    # self.JOB_STATUS[job_id] = 'SPAWNED'
+
     
+    for ja in RangeSet(job['array']):
+      ka = "%s_%s" % (job_id,ja)
+      self.log_debug('adding job %s to statistics' % ka)
+      self.JOB_WORKDIR[ka]  =   os.getcwd()
+      self.JOB_STATUS[ka] = 'SPAWNED'
       
     self.log_info('submitting job %s --> Job # %s <-depends-on %s' % (job['name'],job_id,job['depends_on']))
 
@@ -364,6 +378,8 @@ class engine:
     f = open(workspace_file+".new", "wb" )
     pickle.dump(self.JOB_ID    ,f)
     pickle.dump(self.JOB_STATUS,f)
+    pickle.dump(self.JOB_WORKDIR,f)
+    pickle.dump(self.JOB,f)
     pickle.dump(self.timing_results,f)
     f.close()
     if os.path.exists(workspace_file):
@@ -380,16 +396,15 @@ class engine:
   def load(self):
 
       #print "loading variables from file "+workspace_file
+      if os.path.exists(self.WORKSPACE_FILE):
+          f = open( self.WORKSPACE_FILE, "rb" )
+          self.JOB_ID    = pickle.load(f)
+          self.JOB_STATUS = pickle.load(f)
+          self.JOB_WORKDIR = pickle.load(f)
+          self.JOB_JOB = pickle.load(f)
+          self.timing_results = pickle.load(f)
+          f.close()
 
-      f = open( self.WORKSPACE_FILE, "rb" )
-      self.JOB_ID    = pickle.load(f)
-      self.JOB_STATUS = pickle.load(f)
-      self.timing_results = pickle.load(f)
-      f.close()
-
-      for job_dir in self.JOB_ID.keys():
-        job_id  = self.JOB_ID[job_dir]
-        self.JOB_WORKDIR[job_id] = job_dir
 
 
   #########################################################################
@@ -398,16 +413,21 @@ class engine:
   def get_current_jobs_status(self):
 
     status_error = False
+    self.JOB_STATS = {}
+    for status in JOB_POSSIBLE_STATES:
+        self.JOB_STATS[status] = []
     
-    self.log_debug('%s jobs to scan' % (len(self.JOB_ID)))
+    self.log_debug('%s jobs to scan' % (len(self.JOB_STATUS)))
     jobs_to_check = list()
-    for j in self.JOB_ID.keys():
-      status = self.job_status(j)
-      self.log_debug('status : /%s/ for job %s ' % (status,j))
+    for job_id in self.JOB_STATUS.keys():
+      status = self.JOB_STATUS[job_id]
+      self.log_debug('status : /%s/ for job %s ) ' % (status,job_id))
       if status in ("CANCELLED","COMPLETED"):
         self.log_debug ('--> not updating status')
+        self.JOB_STATS[status].append(job_id)
       else:
-        jobs_to_check.append(j)
+        if not(job_id in jobs_to_check):
+            jobs_to_check.append(job_id)
 
     if len(jobs_to_check)==0:
       return
@@ -427,18 +447,21 @@ class engine:
           self.log_debug('l=%s'%l,4)
           j=l.split(" ")[0].split(".")[0]
           status=l.split(" ")[-8]
-          if status in ('PENDING','RUNNING','SUSPENDED','COMPLETED','CANCELLED','CANCELLED+','FAILED','TIMEOUT',
-                        'NODE_FAIL','PREEMPTED','BOOT_FAIL','COMPLETING','CONFIGURING','RESIZING','SPECIAL_EXIT'):
+          if status in JOB_POSSIBLE_STATES:
             self.log_debug('status=%s j=%s' % (status,j),1)
             if status[-1]=='+':
               status  = status[:-1]
             self.JOB_STATUS[j] = self.JOB_STATUS[self.JOB_WORKDIR[j]] = status
+            self.JOB_STATS[status].append(job_id)
         except:
           if self.args.debug:
             self.dump_exception('[get_current_job_status] parse job_status with j=%s' % j +"\n job status : "+l)
           else:
             status_error = True
           pass
+
+    self.log_debug('%s' % self.JOB_STATS)
+    
     self.save()
 
     if status_error:

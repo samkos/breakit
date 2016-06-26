@@ -116,6 +116,10 @@ class breakit(engine):
     #
     if self.args.status:
       self.get_current_jobs_status()
+      for status in self.JOB_STATS:
+        nb = len(self.JOB_STATS[status])
+        if nb:
+          print '%s -> %d jobs' % (status,nb)
       sys.exit(0)
 
     
@@ -207,6 +211,8 @@ class breakit(engine):
     
     jobs = self.get_current_jobs_status()
 
+ 
+    
     max=0
     nb_jobs = 0
     for j in jobs.keys():
@@ -329,12 +335,6 @@ class breakit(engine):
 
 
     (job_id,cmd)  = self.submit(new_job)
-          
-    self.JOB_ID[job_name]  = self.JOB_ID[os.path.abspath("%s" % job_script)] =   job_id
-    self.JOB_WORKDIR[job_id]  =   os.getcwd()
-    self.JOB_STATUS[job_id] = 'SPAWNED'
-
-    self.save()
 
     self.log_debug('submitting job %s Job # %s_%s-%s' % (job_name,job_id,range_first,range_last),4)
 
