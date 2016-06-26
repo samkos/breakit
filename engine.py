@@ -265,6 +265,89 @@ class engine:
 
     self.log_info('environment initialized successfully',1)
 
+
+  #########################################################################
+  # submitting one job   the definitive one
+  #########################################################################
+
+  def submit(self,job):
+
+    cmd = [self.SCHED_SUB]
+
+    if (job['depends_on']) :
+      cmd = cmd + [self.SCHED_DEP+":%s"%job['depends_on'] ]
+
+    if self.args.exclude_nodes:
+      cmd = cmd + ["-x",self.args.exclude_nodes]
+
+    if not(job['array']):
+      job['array'] = '1-1'
+      
+    if self.MY_MACHINE=="sam":
+      job['account'] = None
+
+    jk = job.keys()
+    for param in ['partition','reservation','time','job-name',
+                  'error','output','ntasks','array','account']:
+      if param in jk:
+        if job[param]:
+          cmd = cmd + ['--%s=%s' % (param,job[param])]
+        
+    if self.args.attempt:
+      cmd = cmd + \
+            ['%s_%s'                % (job['command'], self.args.attempt) ]
+      job_content_template = "".join(open(job['command'],"r").readlines())
+      job_content_updated  = job_content_template.replace('__ATTEMPT__',"%s" % self.args.attempt)
+      job_script_updated  = open('%s_%s' % (job['command'], self.args.attempt), "w")
+      job_script_updated.write(job_content_updated)
+      job_script_updated.close()
+    else:
+      cmd = cmd + \
+            ['%s'                % (job['command']) ]
+
+    if not self.args.dry:
+      self.log_debug("submitting : "+" ".join(cmd))
+      output = subprocess.check_output(cmd)
+      if self.args.pbs:
+        #print output.split("\n")
+        job_id = output.split("\n")[0].split(".")[0]
+        #print job_id
+      else:
+        for l in output.split("\n"):
+          self.log_debug(l,1)
+          #print l.split(" ")
+          if "Submitted batch job" in l:
+            job_id = l.split(" ")[-1]
+      self.log_debug("job submitted : %s depends on %s" % (job_id,job['depends_on']),1)
+    else: 
+      self.log_debug("should submit job %s" % job['name'])
+      self.log_debug(" with cmd = %s " % " ".join(cmd))
+      job_id = "%s" % job['name']
+
+    job['job_id'] = job_id
+    job['submit_cmd'] = cmd
+        
+
+    if 'step_before' in jk:
+      step_before = job['step_before']
+      if step_before:
+        self.JOB[step_before]['comes_before'] = self.JOB[self.JOB[step_before]['job_id']]['comes_before'] =  job_id
+        self.JOB[step_before]['make_depend'] = self.JOB[self.JOB[step_before]['job_id']]['make_depend'] =  job_id
+
+    self.JOB[job_id] = self.JOB[job['name']] = job
+    
+      
+    self.log_info('submitting job %s --> Job # %s <-depends-on %s' % (job['name'],job_id,job['depends_on']))
+
+    self.log_debug("Saving Job Ids...",1)
+    self.save()
+
+    return (job_id,cmd)
+
+
+
+
+
   #########################################################################
   # save_workspace
   #########################################################################
@@ -320,7 +403,7 @@ class engine:
     jobs_to_check = list()
     for j in self.JOB_ID.keys():
       status = self.job_status(j)
-      self.log_debug('status : /%s/ for job %s from dir >>%s<<' % (status,j,self.JOB_WORKDIR[j]))
+      self.log_debug('status : /%s/ for job %s ' % (status,j))
       if status in ("CANCELLED","COMPLETED"):
         self.log_debug ('--> not updating status')
       else:
@@ -334,26 +417,24 @@ class engine:
     try:
       output = subprocess.check_output(cmd)
     except:
-      if self.DEBUG:
+      if self.args.debug:
         self.dump_exception('[get_current_job_status] subprocess with ' + " ".join(cmd))
       else:
         status_error = True
       output=""
     for l in output.split("\n"):
         try:
-          if self.DEBUG:
-            print l
+          self.log_debug('l=%s'%l,4)
           j=l.split(" ")[0].split(".")[0]
           status=l.split(" ")[-8]
           if status in ('PENDING','RUNNING','SUSPENDED','COMPLETED','CANCELLED','CANCELLED+','FAILED','TIMEOUT',
                         'NODE_FAIL','PREEMPTED','BOOT_FAIL','COMPLETING','CONFIGURING','RESIZING','SPECIAL_EXIT'):
-            if self.DEBUG:
-              print status,j
+            self.log_debug('status=%s j=%s' % (status,j),1)
             if status[-1]=='+':
               status  = status[:-1]
             self.JOB_STATUS[j] = self.JOB_STATUS[self.JOB_WORKDIR[j]] = status
         except:
-          if self.DEBUG:
+          if self.args.debug:
             self.dump_exception('[get_current_job_status] parse job_status with j=%s' % j +"\n job status : "+l)
           else:
             status_error = True
