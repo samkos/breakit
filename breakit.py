@@ -66,11 +66,6 @@ class breakit(engine):
     
     self.BREAKIT_DIR = os.getenv('BREAKIT_PATH')
     
-    self.JOB_ID = {}
-    self.JOB_STATUS = {}
-    self.JOB_ID_FILE = "%s/job_ids.pickle" % self.LOG_DIR
-    self.LOCK_FILE = "%s/lock" % self.LOG_DIR
-    self.STATS_ID_FILE = "%s/stats_ids.pickle" % self.LOG_DIR
         
 
     self.MY_EXEC = sys.argv[0]
@@ -80,7 +75,7 @@ class breakit(engine):
 
     
     if os.path.exists(self.WORKSPACE_FILE):
-      self.load_workspace()
+      self.load()
 
 
   def start(self):
@@ -110,6 +105,7 @@ class breakit(engine):
     self.parser.add_argument("--job-file-path", type=str , help=argparse.SUPPRESS)
     self.parser.add_argument("--taskid", type=int ,  help=argparse.SUPPRESS)
     self.parser.add_argument("--array-current-first", type=int , help=argparse.SUPPRESS)
+    self.parser.add_argument("--attempt", type=int , default=0, help=argparse.SUPPRESS)
 
     engine.initialize_parser(self)
     
@@ -152,7 +148,7 @@ class breakit(engine):
       self.prepare_computation()
       job = self.job_submit(1,self.TO)
       self.log_debug("Saving Job Ids...",1)
-      self.save_workspace()
+      self.save()
     else:
       self.manage_jobs()
 
@@ -198,26 +194,26 @@ class breakit(engine):
                               range_first=range_first,
                               range_last=range_first+self.args.chunk/4-1,
                               dep=self.args.jobid)
-        self.save_workspace()
+        self.save()
 
   #########################################################################
   # manage_jobs()
   #########################################################################
   def check_jobs(self):
     #
-    print "continuing... taking lock"
+    self.log_debug("continuing... taking lock",4)
     lock_file = self.take_lock(self.LOCK_FILE)
-    print "got lock!"
+    self.log_debug("got lock!",4)
     
     jobs = self.get_current_jobs_status()
-    print jobs
+
     max=0
     nb_jobs = 0
     for j in jobs.keys():
       status = jobs[j]
       if status=='RUNNING' or status=='PENDING':
         cmd = "squeue -r -u %s | grep %s " % (getpass.getuser(),j)
-        qualified_jobs = self.wrapped_system(cmd)
+        qualified_jobs = self.system(cmd)
         print qualified_jobs
         for q in qualified_jobs.split('\n'):
           q = re.sub(r"\s+"," ", q)
@@ -238,11 +234,11 @@ class breakit(engine):
       print 'can still submit...'
       if self.args.go_on:
         self.job_array_submit("xxx", self.args.job_file_path, max+1, self.TO)
-        self.save_workspace()
+        self.save()
 
     time.sleep(2)
     self.release_lock(lock_file)
-    print 'lock released'
+    self.log_debug('lock released')
     
 
 
@@ -315,58 +311,32 @@ class breakit(engine):
 
     job_content = job_content.replace("__ARRAY_CURRENT_FIRST__","%s" % range_first)
 
-    job_file = '%s/job_template.%d-%d.job' % (self.SAVE_DIR,range_first,range_last)
-    f=open(job_file,'w')
+    job_script = '%s/job_template.%d-%d.job' % \
+                 (self.SAVE_DIR,range_first,range_last)
+    f=open(job_script,'w')
     f.write(job_content)
     f.close()
 
       
-    cmd = [self.SCHED_SUB]
-    if (dep) :
-      cmd = cmd + [self.SCHED_DEP+":%s"%dep ]
+    new_job = { 'name' : job_name,
+                'comes_after': dep,
+                'depends_on' : dep,
+                'command' : os.path.abspath("%s" % job_script),
+                'submit_dir' : os.getcwd(),
+                'array' :self.ARRAY[(range_first-1):range_last],
+    }
 
-    if self.args.exclude_nodes:
-      cmd = cmd + ["-x",self.args.excludes_nodes]
 
-    if self.args.partition:
-      cmd = cmd + ["--partition=%s" % self.args.partition]
 
-    if self.args.reservation:
-      cmd = cmd + ["--reservation=%s" % self.args.reservation]
-
-    cmd = cmd + [self.SCHED_ARR,"%s" % self.ARRAY[(range_first-1):range_last],job_file ]
-
-      
-    self.log_debug("submitting : "+" ".join(cmd))
-
-    if not self.args.dry:
-      try:
-        output = subprocess.check_output(cmd)
-      except:
-        self.error_report("Something went wrong during the submission of the job",exit=True,exception=self.args.debug)
+    (job_id,cmd)  = self.submit(new_job)
           
-      if self.args.pbs:
-        #print output.split("\n")
-        job_id = output.split("\n")[0].split(".")[0]
-        #print job_id
-      else:
-        for l in output.split("\n"):
-          self.log_debug(l,1)
-          #print l.split(" ")
-          if "Submitted batch job" in l:
-            job_id = l.split(" ")[-1]
-      self.log_debug("job submitted : %s depends on %s" % (job_id,dep),1)
-    else: 
-      self.log_debug("should submit job %s" % job_name,1)
-      self.log_debug(" with cmd = %s " % " ".join(cmd),1)
-      job_id = "self.JOB_ID_%s" % job_name
-
-    self.JOB_ID[job_name] =   job_id
+    self.JOB_ID[job_name]  = self.JOB_ID[os.path.abspath("%s" % job_script)] =   job_id
+    self.JOB_WORKDIR[job_id]  =   os.getcwd()
     self.JOB_STATUS[job_id] = 'SPAWNED'
 
-    self.save_workspace()
+    self.save()
 
-    print 'submitting job %s Job # %s_%s-%s' % (job_name,job_id,range_first,range_last)
+    self.log_debug('submitting job %s Job # %s_%s-%s' % (job_name,job_id,range_first,range_last),4)
 
     return job_id
 
@@ -383,7 +353,7 @@ class breakit(engine):
     #job_name = "%d-%d-%%K" % (range_first,range_last)
     job_name = "job_template"
     # job_dir = "%s/%03d" %  (self.JOB_DIR,n)
-    # if os.path.exists(job_dir) and not (n+1 in self.JOBS_TO_RELAUNCH.keys()):
+    # if os.path.exists(job_dir) and not (n+1 in self.JOB_TO_RELAUNCH.keys()):
     #   self.error_report("Something is going weird...\ndirectory %s allready exists..." % job_dir)
 
     dep =  ""
@@ -409,6 +379,86 @@ class breakit(engine):
       job_id=self.job_array_submit(job_name,job_file,j,j+self.args.chunk/4-1,dep)
 
     self.log_debug('submitted job array [%s,%s] successfully...' % (range_first,range_last),1) 
+
+
+
+  #########################################################################
+  # submitting one job   the definitive one
+  #########################################################################
+
+  def submit(self,job):
+
+    cmd = [self.SCHED_SUB]
+
+    if (job['depends_on']) :
+      cmd = cmd + [self.SCHED_DEP+":%s"%job['depends_on'] ]
+
+    if self.args.exclude_nodes:
+      cmd = cmd + ["-x",self.args.exclude_nodes]
+
+    if not(job['array']):
+      job['array'] = '1-1'
+      
+    if self.MY_MACHINE=="sam":
+      job['account'] = None
+
+    jk = job.keys()
+    for param in ['partition','reservation','time','job-name',
+                  'error','output','ntasks','array','account']:
+      if param in jk:
+        if job[param]:
+          cmd = cmd + ['--%s=%s' % (param,job[param])]
+        
+    if self.args.attempt:
+      cmd = cmd + \
+            ['%s_%s'                % (job['command'], self.args.attempt) ]
+      job_content_template = "".join(open(job['command'],"r").readlines())
+      job_content_updated  = job_content_template.replace('__ATTEMPT__',"%s" % self.args.attempt)
+      job_script_updated  = open('%s_%s' % (job['command'], self.args.attempt), "w")
+      job_script_updated.write(job_content_updated)
+      job_script_updated.close()
+    else:
+      cmd = cmd + \
+            ['%s'                % (job['command']) ]
+
+    if not self.args.dry:
+      self.log_debug("submitting : "+" ".join(cmd))
+      output = subprocess.check_output(cmd)
+      if self.args.pbs:
+        #print output.split("\n")
+        job_id = output.split("\n")[0].split(".")[0]
+        #print job_id
+      else:
+        for l in output.split("\n"):
+          self.log_debug(l,1)
+          #print l.split(" ")
+          if "Submitted batch job" in l:
+            job_id = l.split(" ")[-1]
+      self.log_debug("job submitted : %s depends on %s" % (job_id,job['depends_on']),1)
+    else: 
+      self.log_debug("should submit job %s" % job['name'])
+      self.log_debug(" with cmd = %s " % " ".join(cmd))
+      job_id = "%s" % job['name']
+
+    job['job_id'] = job_id
+    job['submit_cmd'] = cmd
+        
+
+    if 'step_before' in jk:
+      step_before = job['step_before']
+      if step_before:
+        self.JOB[step_before]['comes_before'] = self.JOB[self.JOB[step_before]['job_id']]['comes_before'] =  job_id
+        self.JOB[step_before]['make_depend'] = self.JOB[self.JOB[step_before]['job_id']]['make_depend'] =  job_id
+
+    self.JOB[job_id] = self.JOB[job['name']] = job
+    
+      
+    self.log_info('submitting job %s --> Job # %s <-depends-on %s' % (job['name'],job_id,job['depends_on']))
+
+    self.log_debug("Saving Job Ids...",1)
+    self.save()
+
+    return (job_id,cmd)
 
 
 
@@ -504,56 +554,6 @@ class breakit(engine):
       job = job + """\ntask_id=`printf "%03d" "$SLURM_ARRAY_TASK_ID"`\n"""
       job = job + """\njob_id=`printf "%03d" "$SLURM_JOB_ID"`\n"""
     return job
-
-
-  #########################################################################
-  # check_env
-  #########################################################################
-  def check_env(self):
-    # chekcking python version
-    try:
-      subprocess.check_output(["ls"])
-    except:
-      print ("ERROR : Please use a more recent version of Python > 2.7.4")
-      sys.exit(1)
-
-
-  #########################################################################
-  # save_workspace
-  #########################################################################
-
-  def save_workspace(self):
-      
-      workspace_file = self.WORKSPACE_FILE
-      self.log_debug("saving variables to file "+workspace_file)
-      f_workspace = open(workspace_file+".new", "wb" )
-      # Save your data here
-      pickle.dump(self.JOB_ID    ,f_workspace)
-      f_workspace.close()
-      if os.path.exists(workspace_file):
-        os.rename(workspace_file,workspace_file+".old")
-      os.rename(workspace_file+".new",workspace_file)
-      
-
-  #########################################################################
-  # load_workspace
-  #########################################################################
-
-  def load_workspace(self):
-
-      workspace_file = self.WORKSPACE_FILE
-      self.log_debug("loading variables from file "+workspace_file)
-
-      f_workspace = open( self.WORKSPACE_FILE, "rb" )
-      # retrieve data here
-      self.JOB_ID    = pickle.load(f_workspace)
-      f_workspace.close()
-
- #     for job_dir in self.JOB_ID.keys():
- #       job_id  = self.JOB_ID[job_dir]
-#        self.JOB_DIR[job_id] = job_dir
-
-
 
 
   #########################################################################

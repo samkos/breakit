@@ -12,7 +12,7 @@ from os.path import expanduser
 from env     import *
 import fcntl
 import getpass
-
+import pickle
 import argparse
 
 LOCK_EX = fcntl.LOCK_EX
@@ -78,6 +78,15 @@ class engine:
     # initialize scheduler
     self.initialize_scheduler()
 
+    # initialize job tracking arrays
+    self.JOB = {}
+    self.JOB_ID = {}
+    self.JOB_WORKDIR = {}
+    self.JOB_STATUS = {}
+    self.timing_results = {}
+    
+    self.LOCK_FILE = "%s/lock" % self.LOG_DIR
+    self.STATS_ID_FILE = "%s/stats_ids.pickle" % self.LOG_DIR
 
     self.env_init()
     
@@ -210,28 +219,6 @@ class engine:
       self.LOG_PREFIX = prefix
     
   #########################################################################
-  # initialize job environment
-  #########################################################################
-
-  def env_init(self):
-
-    self.log_debug('initialize environment ',1)
-
-    for d in [self.SAVE_DIR,self.LOG_DIR]:
-      if not(os.path.exists(d)):
-        os.makedirs(d)
-        self.log_debug("creating directory "+d,1)
-    
-    for f in glob.glob("*.py"):
-      self.log_debug("copying file %s into SAVE directory " % f,1)
-      os.system("cp ./%s  %s" % (f,self.SAVE_DIR))
-
-    # for f in self.FILES_TO_COPY:
-    #   os.system("cp %s/%s %s/" % (self.INITIAL_DATA_DIR,f,self.JOB_DIR_0))
-
-    self.log_info('environment initialized successfully',1)
-
-  #########################################################################
   # initialize_scheduler
   #########################################################################
   def initialize_scheduler(self):
@@ -257,6 +244,72 @@ class engine:
 
 
   #########################################################################
+  # initialize job environment
+  #########################################################################
+
+  def env_init(self):
+
+    self.log_debug('initialize environment ',1)
+
+    for d in [self.SAVE_DIR,self.LOG_DIR]:
+      if not(os.path.exists(d)):
+        os.makedirs(d)
+        self.log_debug("creating directory "+d,1)
+    
+    for f in glob.glob("*.py"):
+      self.log_debug("copying file %s into SAVE directory " % f,1)
+      os.system("cp ./%s  %s" % (f,self.SAVE_DIR))
+
+    # for f in self.FILES_TO_COPY:
+    #   os.system("cp %s/%s %s/" % (self.INITIAL_DATA_DIR,f,self.JOB_DIR_0))
+
+    self.log_info('environment initialized successfully',1)
+
+  #########################################################################
+  # save_workspace
+  #########################################################################
+
+  def save(self):
+      
+    #
+    lock_file = self.take_lock(self.LOCK_FILE)
+
+    # could need to load workspace and merge it
+    
+    #print "saving variables to file "+workspace_file
+    workspace_file = self.WORKSPACE_FILE
+    f = open(workspace_file+".new", "wb" )
+    pickle.dump(self.JOB_ID    ,f)
+    pickle.dump(self.JOB_STATUS,f)
+    pickle.dump(self.timing_results,f)
+    f.close()
+    if os.path.exists(workspace_file):
+      os.rename(workspace_file,workspace_file+".old")
+    os.rename(workspace_file+".new",workspace_file)
+    
+    self.release_lock(lock_file)
+
+
+  #########################################################################
+  # load_workspace
+  #########################################################################
+
+  def load(self):
+
+      #print "loading variables from file "+workspace_file
+
+      f = open( self.WORKSPACE_FILE, "rb" )
+      self.JOB_ID    = pickle.load(f)
+      self.JOB_STATUS = pickle.load(f)
+      self.timing_results = pickle.load(f)
+      f.close()
+
+      for job_dir in self.JOB_ID.keys():
+        job_id  = self.JOB_ID[job_dir]
+        self.JOB_WORKDIR[job_id] = job_dir
+
+
+  #########################################################################
   # get status of all jobs ever launched
   #########################################################################
   def get_current_jobs_status(self):
@@ -267,7 +320,7 @@ class engine:
     jobs_to_check = list()
     for j in self.JOB_ID.keys():
       status = self.job_status(j)
-      self.log_debug('status : /%s/ for job %s from dir >>%s<<' % (status,j,self.JOB_DIR[j]))
+      self.log_debug('status : /%s/ for job %s from dir >>%s<<' % (status,j,self.JOB_WORKDIR[j]))
       if status in ("CANCELLED","COMPLETED"):
         self.log_debug ('--> not updating status')
       else:
@@ -298,14 +351,14 @@ class engine:
               print status,j
             if status[-1]=='+':
               status  = status[:-1]
-            self.JOB_STATUS[j] = self.JOB_STATUS[self.JOB_DIR[j]] = status
+            self.JOB_STATUS[j] = self.JOB_STATUS[self.JOB_WORKDIR[j]] = status
         except:
           if self.DEBUG:
             self.dump_exception('[get_current_job_status] parse job_status with j=%s' % j +"\n job status : "+l)
           else:
             status_error = True
           pass
-
+    self.save()
 
     if status_error:
       self.log_info('!WARNING! Error encountered scanning job status, run with --debug to know more')
@@ -442,7 +495,7 @@ class engine:
   # os.system wrapped to enable Trace if needed
   #########################################################################
 
-  def wrapped_system(self,cmd,comment="No comment",fake=False):
+  def system(self,cmd,comment="No comment",fake=False):
 
     self.log_debug("\tcurrently executing /%s/ :\n\t\t%s" % (comment,cmd))
 
