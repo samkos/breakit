@@ -52,7 +52,7 @@ ERROR = -1
 
 class breakit(engine):
 
-  def __init__(self,engine_version=0.14,app_name='breakit'):
+  def __init__(self,engine_version=0.15,app_name='breakit'):
 
     
     self.WORKSPACE_FILE = "nodecheck.pickle"
@@ -67,6 +67,7 @@ class breakit(engine):
     self.BREAKIT_DIR = os.getenv('BREAKIT_PATH')
     
     self.JOB_ID = {}
+    self.JOB_STATUS = {}
     self.JOB_ID_FILE = "%s/job_ids.pickle" % self.LOG_DIR
     self.LOCK_FILE = "%s/lock" % self.LOG_DIR
     self.STATS_ID_FILE = "%s/stats_ids.pickle" % self.LOG_DIR
@@ -96,7 +97,6 @@ class breakit(engine):
 
 
   def initialize_parser(self):
-    engine.initialize_parser(self)
 
     self.parser.add_argument("-a","--array", type=str , help="Array indexes")
     self.parser.add_argument("-c","--chunk", type=int , help="maximum number of jobs to queue simultaneously", default=8)
@@ -104,21 +104,36 @@ class breakit(engine):
     
     self.parser.add_argument("--go-on", action="store_true", help=argparse.SUPPRESS)
     self.parser.add_argument("--finalize", action="store_true", help=argparse.SUPPRESS)
+    self.parser.add_argument("-s","--status", action="store_true", help='checking status of jobs')
     self.parser.add_argument("--exit-code", type=int , default=0,  help=argparse.SUPPRESS)
     self.parser.add_argument("--jobid", type=int ,  help=argparse.SUPPRESS)
     self.parser.add_argument("--job-file-path", type=str , help=argparse.SUPPRESS)
     self.parser.add_argument("--taskid", type=int ,  help=argparse.SUPPRESS)
     self.parser.add_argument("--array-current-first", type=int , help=argparse.SUPPRESS)
 
+    engine.initialize_parser(self)
+    
   #########################################################################
   # main routeur
   #########################################################################
   def run(self):
     #
-    self.args.job = os.path.expanduser(self.args.job)
+    if self.args.status:
+      self.get_current_jobs_status()
+      sys.exit(0)
 
     
-    self.args.chunk = max(self.args.chunk,8)/4*4
+    if self.args.finalize:
+      self.finalize()
+      sys.exit(0)
+
+    self.log_info('starting Task %s' % self.args.taskid,1)
+
+    if self.args.job:
+      self.args.job = os.path.expanduser(self.args.job)
+
+    if self.args.chunk:
+      self.args.chunk = max(self.args.chunk,8)/4*4
 
     if self.args.array:
       self.ARRAY = RangeSet(self.args.array)
@@ -133,17 +148,11 @@ class breakit(engine):
                                '\n           --chunk=<maximum number of jobs to queued simultaneously>')
     
     
-    self.log_info('starting Task %s' % self.args.taskid,1)
-
-    if self.args.finalize:
-      self.finalize()
-      sys.exit(0)
-
     if not(self.args.go_on):
       self.prepare_computation()
       job = self.job_submit(1,self.TO)
       self.log_debug("Saving Job Ids...",1)
-      pickle.dump( self.JOB_ID, open(self.JOB_ID_FILE, "wb" ) )
+      self.save_workspace()
     else:
       self.manage_jobs()
 
@@ -189,7 +198,7 @@ class breakit(engine):
                               range_first=range_first,
                               range_last=range_first+self.args.chunk/4-1,
                               dep=self.args.jobid)
-        pickle.dump( self.JOB_ID, open(self.JOB_ID_FILE, "wb" ) )
+        self.save_workspace()
 
   #########################################################################
   # manage_jobs()
@@ -229,7 +238,7 @@ class breakit(engine):
       print 'can still submit...'
       if self.args.go_on:
         self.job_array_submit("xxx", self.args.job_file_path, max+1, self.TO)
-        pickle.dump( self.JOB_ID, open(self.JOB_ID_FILE, "wb" ) )
+        self.save_workspace()
 
     time.sleep(2)
     self.release_lock(lock_file)
@@ -255,68 +264,6 @@ class breakit(engine):
       if not(os.path.exists(d)):
         os.makedirs(d)
         self.log_debug("creating directory %s" % d,1)
-
-        
-  #########################################################################
-  # get current job status
-  #########################################################################
-  def get_current_jobs_status(self):
-
-    self.log_debug("getting  current status of all jobs",1)
-
-    self.initialize_scheduler()
-
-    existing_jobs = {}
-    completed_jobs = {}
-
-    if not(os.path.exists(self.JOB_ID_FILE)):
-      self.log_debug("No Job information available... Cannot kill anything...",1)
-      return existing_jobs
-
-    self.JOB_ID = pickle.load( open( self.JOB_ID_FILE, "rb" ) )
-
-
-    if self.args.dry:
-      return existing_jobs
-
-    my_username = getpass.getuser()
-    my_jobs = []
-    for k in self.JOB_ID.keys():
-      my_jobs = my_jobs + [self.JOB_ID[k]]
-    self.log_debug("checking on exiting jobs for user %s : > %s < " % (my_username," ".join(my_jobs)),2)
-    
-    cmd = [self.SCHED_Q,"-l","-u",my_username]
-
-    output = subprocess.check_output(cmd)
-    for l in output.split("\n"):
-      self.log_debug(l,2)
-      if l.find(my_username)>-1:
-        l = re.sub(r'^\s+', "",l)
-        l = re.sub(r'\s+', " ",l)
-        f = l.split(" ")
-        if self.args.pbs:
-          fj = f[0].split(".")
-        else:
-          fj = f[0].split("_")
-        job_id = fj[0]
-        if len(fj)>1:
-          job_range = fj[1]
-        else:
-          job_range=""
-        if self.args.pbs:
-          job_status = f[-3]
-        else:
-          job_status = f[4]
-        if job_id in my_jobs:
-          existing_jobs[job_id] = job_status
-          self.log_debug("job %s %s %s " % (job_id,job_status,job_range),1)
-
-    for job_id in self.JOB_ID.keys():
-      if not(job_id in existing_jobs.keys()):
-        completed_jobs[job_id] = 'COMPLETED'
-        self.log_debug("job %s %s %s" %(job_id,"COMPLETED","??"))
-
-    return existing_jobs
 
   #########################################################################
   # kill jobs... after asking confirmation
@@ -414,7 +361,10 @@ class breakit(engine):
       self.log_debug(" with cmd = %s " % " ".join(cmd),1)
       job_id = "self.JOB_ID_%s" % job_name
 
-    self.JOB_ID[job_name] =  job_id
+    self.JOB_ID[job_name] =   job_id
+    self.JOB_STATUS[job_id] = 'SPAWNED'
+
+    self.save_workspace()
 
     print 'submitting job %s Job # %s_%s-%s' % (job_name,job_id,range_first,range_last)
 
@@ -578,7 +528,7 @@ class breakit(engine):
       self.log_debug("saving variables to file "+workspace_file)
       f_workspace = open(workspace_file+".new", "wb" )
       # Save your data here
-      #pickle.dump(self.JOB_ID    ,f_workspace)
+      pickle.dump(self.JOB_ID    ,f_workspace)
       f_workspace.close()
       if os.path.exists(workspace_file):
         os.rename(workspace_file,workspace_file+".old")
@@ -596,12 +546,12 @@ class breakit(engine):
 
       f_workspace = open( self.WORKSPACE_FILE, "rb" )
       # retrieve data here
-      #self.JOB_ID    = pickle.load(f_workspace)
+      self.JOB_ID    = pickle.load(f_workspace)
       f_workspace.close()
 
-      for job_dir in self.JOB_ID.keys():
-        job_id  = self.JOB_ID[job_dir]
-        self.JOB_DIR[job_id] = job_dir
+ #     for job_dir in self.JOB_ID.keys():
+ #       job_id  = self.JOB_ID[job_dir]
+#        self.JOB_DIR[job_id] = job_dir
 
 
 

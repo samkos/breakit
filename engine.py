@@ -19,7 +19,7 @@ LOCK_EX = fcntl.LOCK_EX
 LOCK_SH = fcntl.LOCK_SH
 LOCK_NB = fcntl.LOCK_NB
 
-ENGINE_VERSION = '0.14'
+ENGINE_VERSION = '0.15'
 
 class LockException(Exception):
     # Error codes:
@@ -110,7 +110,7 @@ class engine:
     self.parser.add_argument("--dry", action="store_true", help=argparse.SUPPRESS)
     self.parser.add_argument("--pbs", action="store_true", help=argparse.SUPPRESS)
     self.parser.add_argument("-x","--exclude-nodes", type=str , help=argparse.SUPPRESS)
-    self.parser.add_argument("--reservation", type=str , help='SLURM reservation')
+    self.parser.add_argument("-r","--reservation", type=str , help='SLURM reservation')
     self.parser.add_argument("-p","--partition", type=str , help='SLURM partition')
         
 
@@ -256,6 +256,84 @@ class engine:
       self.SCHED_DEP_NOK = "--dependency=afternotok"
 
 
+  #########################################################################
+  # get status of all jobs ever launched
+  #########################################################################
+  def get_current_jobs_status(self):
+
+    status_error = False
+    
+    self.log_debug('%s jobs to scan' % (len(self.JOB_ID)))
+    jobs_to_check = list()
+    for j in self.JOB_ID.keys():
+      status = self.job_status(j)
+      self.log_debug('status : /%s/ for job %s from dir >>%s<<' % (status,j,self.JOB_DIR[j]))
+      if status in ("CANCELLED","COMPLETED"):
+        self.log_debug ('--> not updating status')
+      else:
+        jobs_to_check.append(j)
+
+    if len(jobs_to_check)==0:
+      return
+    
+    cmd = ["sacct","-j",",".join(jobs_to_check)]
+    self.log_debug('cmd so get new status : %s' % " ".join(cmd))
+    try:
+      output = subprocess.check_output(cmd)
+    except:
+      if self.DEBUG:
+        self.dump_exception('[get_current_job_status] subprocess with ' + " ".join(cmd))
+      else:
+        status_error = True
+      output=""
+    for l in output.split("\n"):
+        try:
+          if self.DEBUG:
+            print l
+          j=l.split(" ")[0].split(".")[0]
+          status=l.split(" ")[-8]
+          if status in ('PENDING','RUNNING','SUSPENDED','COMPLETED','CANCELLED','CANCELLED+','FAILED','TIMEOUT',
+                        'NODE_FAIL','PREEMPTED','BOOT_FAIL','COMPLETING','CONFIGURING','RESIZING','SPECIAL_EXIT'):
+            if self.DEBUG:
+              print status,j
+            if status[-1]=='+':
+              status  = status[:-1]
+            self.JOB_STATUS[j] = self.JOB_STATUS[self.JOB_DIR[j]] = status
+        except:
+          if self.DEBUG:
+            self.dump_exception('[get_current_job_status] parse job_status with j=%s' % j +"\n job status : "+l)
+          else:
+            status_error = True
+          pass
+
+
+    if status_error:
+      self.log_info('!WARNING! Error encountered scanning job status, run with --debug to know more')
+      
+  #########################################################################
+  # get current job status
+  #########################################################################
+  def job_status(self,id_or_file):
+
+    self.log_debug("[job_status] job_status on %s " % id_or_file)
+    dirname="xxx"
+    if os.path.isfile(id_or_file):
+      dirname = os.path.abspath(os.path.dirname(id_or_file))
+    if os.path.isdir(id_or_file):
+      dirname = os.path.abspath(id_or_file)
+
+    for key in [id_or_file,dirname]:
+      if key in self.JOB_STATUS.keys():
+        status = self.JOB_STATUS[key]
+        self.log_debug("[job_status] job_status on %s --> %s" % (id_or_file,status))
+        return status
+    self.log_debug("[job_status] job_status on %s --> UNKNOWN" % id_or_file)
+    return "NOINFO"
+
+
+
+
+      
   #########################################################################
   # welcome message
   #########################################################################
