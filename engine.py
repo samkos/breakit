@@ -25,7 +25,7 @@ LOCK_EX = fcntl.LOCK_EX
 LOCK_SH = fcntl.LOCK_SH
 LOCK_NB = fcntl.LOCK_NB
 
-ENGINE_VERSION = '0.15'
+ENGINE_VERSION = '0.16'
 
 class LockException(Exception):
     # Error codes:

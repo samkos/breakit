@@ -52,7 +52,7 @@ ERROR = -1
 
 class breakit(engine):
 
-  def __init__(self,engine_version=0.15,app_name='breakit'):
+  def __init__(self,engine_version=0.16,app_name='breakit'):
 
     
     self.APP_NAME  = app_name
@@ -137,7 +137,7 @@ class breakit(engine):
       self.TO = len(self.ARRAY)
       self.log_debug('ARRAY=%s' % ( self.ARRAY))
     else:
-      self.error_report(message='please set ' + \
+      self.error(message='please set ' + \
                                '\n  - a range for your job with the option ' + \
                                '\n           --array=<array-indexes> ' + \
                                '\n         ' + \
@@ -357,7 +357,7 @@ class breakit(engine):
         input_var = raw_input("Do you really want to kill all running jobs ? (yes/no) ")
     
         if not(input_var == "yes"):
-          self.error_report("No clear confirmation... giving up!")
+          self.error("No clear confirmation... giving up!")
     
       for j in existing_jobs.keys():
         self.log_debug("killing job %s -> ?? " % (j),1)
@@ -473,11 +473,11 @@ class breakit(engine):
     job_file_path = '%s/job_template.job' % (self.SAVE_DIR) #,job_name)
 
     if not(os.path.exists(job_name)):
-        self.error_report("Template job file %s missing..." % job_name)
+        self.error("Template job file %s missing..." % job_name)
     job_header = greps(self.SCHED_TAG,job_name)
 
     if not(job_header):
-        self.error_report("Template job file %s does not contain any %s line..." % (job_name,self.SCHED_TAG))
+        self.error("Template job file %s does not contain any %s line..." % (job_name,self.SCHED_TAG))
 
     nb_header_lines = len(job_header)
     for l in open(job_name,"r").readlines():
