@@ -43,7 +43,7 @@ import glob
 
 import argparse
 
-from engine import engine
+from engine import engine,JOB_POSSIBLE_STATES
 from env import *
 from ClusterShell.NodeSet import *
 
@@ -55,8 +55,6 @@ class breakit(engine):
   def __init__(self,engine_version=0.15,app_name='breakit'):
 
     
-    self.WORKSPACE_FILE = "nodecheck.pickle"
-
     self.APP_NAME  = app_name
     self.VERSION = "0.3"
     self.ENGINE_VERSION_REQUIRED = engine_version
@@ -64,7 +62,9 @@ class breakit(engine):
     engine.__init__(self,self.APP_NAME,self.VERSION,engine_version_required=self.ENGINE_VERSION_REQUIRED)
 
     
+    self.TASK_FILE = "./.%s/SAVE/%s.pickle" % (app_name,'tasks')
     self.BREAKIT_DIR = os.getenv('BREAKIT_PATH')
+    self.TASK_LOCK_FILE = "%s/task_lock" % self.LOG_DIR
     
         
 
@@ -72,10 +72,11 @@ class breakit(engine):
     self.MY_EXEC_SAVED = self.SAVE_DIR+"/"+os.path.basename(sys.argv[0])
     self.INITIAL_DATA_DIR = "."
 
-
+    self.TASK_STATUS = {}
+    self.TASK_JOB_ID = {}
     
-    if os.path.exists(self.WORKSPACE_FILE):
-      self.load()
+    self.load()
+    
 
 
   def start(self):
@@ -115,11 +116,7 @@ class breakit(engine):
   def run(self):
     #
     if self.args.status:
-      self.get_current_jobs_status()
-      for status in self.JOB_STATS:
-        nb = len(self.JOB_STATS[status])
-        if nb:
-          print '%s -> %d jobs' % (status,nb)
+      self.check_jobs()
       sys.exit(0)
 
     
@@ -153,10 +150,53 @@ class breakit(engine):
       job = self.job_submit(1,self.TO)
       self.log_debug("Saving Job Ids...",1)
       self.save()
+      self.save_task_stats()
     else:
       self.manage_jobs()
 
 
+  #########################################################################
+  # save_workspace
+  #########################################################################
+
+  def save_task_stats(self,take_lock=True):
+      
+    #
+    if take_lock:
+      lock_file = self.take_lock(self.TASK_LOCK_FILE)
+
+    # could need to load workspace and merge it
+    
+    #print "saving variables to file "+workspace_file
+    workspace_file = self.TASK_FILE
+    f = open(workspace_file+".new", "wb" )
+    pickle.dump(self.TASK_STATUS,f)
+    pickle.dump(self.TASK_JOB_ID,f)
+    f.close()
+    if os.path.exists(workspace_file):
+      os.rename(workspace_file,workspace_file+".old")
+    os.rename(workspace_file+".new",workspace_file)
+
+    if take_lock:
+      self.release_lock(lock_file)
+
+
+  #########################################################################
+  # load_workspace
+  #########################################################################
+
+  def load_task_stats(self):
+
+    try:
+      #print "loading variables from file "+workspace_file
+      if os.path.exists(self.TASK_FILE):
+          f = open( self.TASK_FILE, "rb" )
+          self.TASK_STATUS = pickle.load(f)
+          self.TASK_JOB_ID = pickle.load(f)
+          f.close()
+    except:
+        self.error('[load]  problem encountered while loading current workspace\n---->  rerun with -d to have more information',
+                          exit=True, exception=self.args.debug)
   #########################################################################
   # finalizing task
   #########################################################################
@@ -166,7 +206,7 @@ class breakit(engine):
     status = 'OK'
     if self.args.exit_code:
       status = 'NOK'
-    filename = '%s/%s.%s-%s-%s' % (self.SAVE_DIR,status,self.args.taskid,\
+    filename = '%s/%s;%s;%s;%s' % (self.SAVE_DIR,status,self.args.taskid,\
                                    self.args.jobid,self.args.exit_code)
     self.log_debug('touching stub file %s' % filename,1)
     f = open(filename,'w')
@@ -205,48 +245,77 @@ class breakit(engine):
   #########################################################################
   def check_jobs(self):
     #
+    TASK_POSSIBLE_STATES = JOB_POSSIBLE_STATES + ('SUBMITTED','OK','NOK','WAITING')
+    
     self.log_debug("continuing... taking lock",4)
-    lock_file = self.take_lock(self.LOCK_FILE)
+    lock_file = self.take_lock(self.TASK_LOCK_FILE)
     self.log_debug("got lock!",4)
+
+    self.load_task_stats()
+
+    # gathering information on tasks just submitted butn ot scheduled
+    for status in ['SUBMITTED']:
+      for f in  glob.glob('%s/%s;*' % (self.SAVE_DIR,status)):
+        l=(status_saved,task,job,exit_code) = os.path.basename(f).split(';')
+        self.TASK_STATUS [task] = status_saved
+        self.TASK_JOB_ID [task] = job
+        os.unlink(f)
+
+    # updating status of tasks already spawned by breakit
     
-    jobs = self.get_current_jobs_status()
+    additional_check = []
+    for (task,status) in self.TASK_STATUS.items():
+      #print task,status
+      if status in ('RUNNING','SUBMITTED','PENDING'):
+        self.log_debug('checking on last status of task %s of previous status /%s/' % \
+                       (task,status))
+        additional_check.append("%s_%s" % (self.TASK_JOB_ID[task],task))
 
- 
+    if len(additional_check):
+        cmd = 'squeue -h -l -o "%.20i %.20T" -r ' + '-u %s | grep _'  % (getpass.getuser())
+        output =  self.system(cmd)
+        jobs = output[:-1].split("\n")
+        if len(jobs):
+          self.log_debug('squeue result: \n >>>%s<<' % output)
+          for l in jobs:
+            if len(l)<3:
+              continue
+            self.log_debug('line scanned: \n >>>%s<<' % l)
+            l = clean_line(l)
+            (id,status) = l.split(" ")
+            (job,task) = id.split("_")
+            #print id, additional_check
+            if id in additional_check:
+              self.TASK_STATUS [task] = status
+              self.log_debug('updated status for %s : %s',task,status)
+
+    # tasks that completed and had the time to save their status
+
+    for status in ['OK','NOK']:
+      for f in  glob.glob('%s/%s;*' % (self.SAVE_DIR,status)):
+        l=(status_saved,task,job,exit_code) = os.path.basename(f).split(';')
+        self.TASK_STATUS [task] = status_saved
+        self.TASK_JOB_ID [task] = job
+        os.unlink(f)
+
+    # saving status for further use
     
-    max=0
-    nb_jobs = 0
-    for j in jobs.keys():
-      status = jobs[j]
-      if status=='RUNNING' or status=='PENDING':
-        cmd = "squeue -r -u %s | grep %s " % (getpass.getuser(),j)
-        qualified_jobs = self.system(cmd)
-        print qualified_jobs
-        for q in qualified_jobs.split('\n'):
-          q = re.sub(r"\s+"," ", q)
-          q = re.sub(r"^\s+","", q)
-          q = re.sub(r"\s.*$","", q)
-          print "/%s/" % q
-          if len(q):
-            job_nb = int(q.split("_")[1])
-            print job_nb
-            nb_jobs = nb_jobs+1
-            if job_nb>max:
-              max = job_nb
-        print nb_jobs,'are still queued for job ',j,'and max index is ',max
-        
-    print nb_jobs,'are still queued and max index is ',max,'out of ',self.TO,'jobs'
-
-    if max>0 and max<self.TO:
-      print 'can still submit...'
-      if self.args.go_on:
-        self.job_array_submit("xxx", self.args.job_file_path, max+1, self.TO)
-        self.save()
-
-    time.sleep(2)
+    self.save_task_stats(take_lock=False)
     self.release_lock(lock_file)
     self.log_debug('lock released')
-    
 
+    # computing and printing dashboard..
+    
+    self.TASK_STATS = {}
+    for status in TASK_POSSIBLE_STATES:
+        self.TASK_STATS[status] = []
+    for (task,status) in self.TASK_STATUS.items():
+      self.TASK_STATS[status].append(task)
+
+    for (status,tasks) in self.TASK_STATS.items():
+      nb = len(self.TASK_STATS[status])
+      if nb:
+        print '%10s -> %4d jobs : (%s) ' % (status,nb,RangeSet(",".join(tasks)))
 
   #########################################################################
   # starting the process
@@ -266,6 +335,11 @@ class breakit(engine):
       if not(os.path.exists(d)):
         os.makedirs(d)
         self.log_debug("creating directory %s" % d,1)
+
+
+    for task in self.ARRAY:
+      self.TASK_STATUS['%s' % task] = 'WAITING'
+
 
   #########################################################################
   # kill jobs... after asking confirmation
@@ -335,7 +409,11 @@ class breakit(engine):
 
 
     (job_id,cmd)  = self.submit(new_job)
-
+    for i in self.ARRAY[(range_first-1):range_last]:
+      status = 'SUBMITTED'
+      filename = '%s/%s;%s;%s;%s' % (self.SAVE_DIR,status,i,job_id,0)
+      open(filename,"w").close()
+      
     self.log_debug('submitting job %s Job # %s_%s-%s' % (job_name,job_id,range_first,range_last),4)
 
     return job_id

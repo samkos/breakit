@@ -258,3 +258,23 @@ def find_files(directory, pattern):
          res.append(filename)
   return res
 
+#########################################################################
+# clean a line from the output
+#########################################################################
+
+def clean_line(line,debug=False):
+ if debug:
+   print "[DEBUG] analyzing line !!"+line+"!!"
+ # replace any multiple blanks by one only
+ p = re.compile("\s+")
+ line = p.sub(' ',line)
+ # get rid of blanks at the end of the line
+ p = re.compile("\s+$")
+ line = p.sub('',line)
+ # get rid of blanks at the beginning of the line
+ p = re.compile("^\s+")
+ line = p.sub('',line)
+ # line is clean!
+ if debug:
+   print "[DEBUG] analyzing  line cleaned !!"+line+"!!"
+ return line

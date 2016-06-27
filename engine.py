@@ -50,7 +50,7 @@ class engine:
     self.LOG_PREFIX=""
     self.LOG_DIR = app_dir_log
    
-    self.WORKSPACE_FILE = ".%s.pickle" % app_name
+    self.WORKSPACE_FILE = "./.%s/SAVE/%s.pickle" % (app_name,'workspace')
     self.JOB_DIR = os.path.abspath("./.%s/RESULTS" % app_name)
     self.SAVE_DIR = os.path.abspath("./.%s/SAVE" % app_name)
     self.LOG_DIR = os.path.abspath("./.%s/LOGS" % app_name)
@@ -351,7 +351,7 @@ class engine:
       self.JOB_WORKDIR[ka]  =   os.getcwd()
       self.JOB_STATUS[ka] = 'SPAWNED'
       
-    self.log_info('submitting job %s --> Job # %s <-depends-on %s' % (job['name'],job_id,job['depends_on']))
+    self.log_info('submitting job %s --> Job # %s ' % (job['name'],job_id))
 
     self.log_debug("Saving Job Ids...",1)
     self.save()
@@ -395,17 +395,19 @@ class engine:
 
   def load(self):
 
+    try:
       #print "loading variables from file "+workspace_file
       if os.path.exists(self.WORKSPACE_FILE):
           f = open( self.WORKSPACE_FILE, "rb" )
           self.JOB_ID    = pickle.load(f)
           self.JOB_STATUS = pickle.load(f)
           self.JOB_WORKDIR = pickle.load(f)
-          self.JOB_JOB = pickle.load(f)
+          self.JOB = pickle.load(f)
           self.timing_results = pickle.load(f)
           f.close()
-
-
+    except:
+        self.error('[load]  problem encountered while loading current workspace\n---->  rerun with -d to have more information',
+                          exit=True, exception=self.args.debug)
 
   #########################################################################
   # get status of all jobs ever launched
@@ -437,31 +439,39 @@ class engine:
     self.log_debug('cmd so get new status : %s' % " ".join(cmd))
     try:
       output = subprocess.check_output(cmd)
+      sacct_worked = True
     except:
       if self.args.debug:
-        self.dump_exception('[get_current_job_status] subprocess with ' + " ".join(cmd))
+        self.error('WARNING [get_current_job_status] subprocess with ' + " ".join(cmd),exception=self.args.debug)
       else:
         status_error = True
       output=""
-    print output[:-1]
-    for l in output[:-1].split("\n"):
-        try:
-          self.log_debug('l=%s'%l,2)
-          j=l.split("|")[0].split(".")[0]
-          status=l.split("|")[-3]
-          print status
-          if status in JOB_POSSIBLE_STATES:
-            self.log_debug('status=%s j=%s' % (status,j),1)
-            if status[-1]=='+':
-              status  = status[:-1]
-            self.JOB_STATUS[j] = status
-            self.JOB_STATS[status].append(job_id)
-        except:
-          if self.args.debug:
-            self.dump_exception('[get_current_job_status] parse job_status with j=%s' % j +"\n job status : "+l)
-          else:
-            status_error = True
-          pass
+      sacct_worked = False
+      self.log_info('[get_current_job_status] sacct could not be used')
+    if sacct_worked:
+      print output[:-1]
+      for l in output[:-1].split("\n"):
+          try:
+            self.log_debug('l=%s'%l,2)
+            j=l.split("|")[0].split(".")[0]
+            status=l.split("|")[-3]
+            print status
+            if status in JOB_POSSIBLE_STATES:
+              self.log_debug('status=%s j=%s' % (status,j),1)
+              if status[-1]=='+':
+                status  = status[:-1]
+              self.JOB_STATUS[j] = status
+              self.JOB_STATS[status].append(job_id)
+          except:
+            if self.args.debug:
+              self.dump_exception('[get_current_job_status] parse job_status with j=%s' % j +"\n job status : "+l)
+            else:
+              status_error = True
+            pass
+
+
+    # checking status from Stub files
+    
 
     self.log_debug('%s' % self.JOB_STATS)
     
@@ -520,7 +530,7 @@ class engine:
   #########################################################################
       
    
-  def error_report(self,message = None, error_detail = "", exit=True,exception=False):
+  def error(self,message = None, error_detail = "", exit=True,exception=False):
       """ helping message"""
       if message:
         message = str(message)+"\n"
@@ -561,7 +571,7 @@ class engine:
     try:
       subprocess.check_output(["ls"])
     except:
-      self.error_report("Please use a more recent version of Python > 2.7.4")
+      self.error("Please use a more recent version of Python > 2.7.4")
 
 
 
@@ -569,7 +579,7 @@ class engine:
     current = int(("%s" % self.ENGINE_VERSION).split('.')[1])
     asked   = int(("%s" % version).split('.')[1])
     if (asked>current):
-        self.error_report("Current Engine version is %s while requiring %s, please fix it!" % (current,asked))
+        self.error("Current Engine version is %s while requiring %s, please fix it!" % (current,asked))
 
 
   #########################################################################
@@ -643,7 +653,7 @@ class engine:
       return False
 
     if not(self.MAIL_COMMAND):
-      self.error_report("No mail command available on this machine")
+      self.error("No mail command available on this machine")
 
     # sendmail only works from a node on shaheen 2 via an ssh connection to cdl via gateway...
 
