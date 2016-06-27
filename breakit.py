@@ -259,7 +259,8 @@ class breakit(engine):
         l=(status_saved,task,job,exit_code) = os.path.basename(f).split(';')
         self.TASK_STATUS [task] = status_saved
         self.TASK_JOB_ID [task] = job
-        os.unlink(f)
+        self.system('mv %s %s/' % (f,self.LOG_DIR))
+        #os.unlink(f)
 
     # updating status of tasks already spawned by breakit
     
@@ -296,7 +297,8 @@ class breakit(engine):
         l=(status_saved,task,job,exit_code) = os.path.basename(f).split(';')
         self.TASK_STATUS [task] = status_saved
         self.TASK_JOB_ID [task] = job
-        os.unlink(f)
+        self.system('mv %s %s/' % (f,self.LOG_DIR))
+        #os.unlink(f)
 
     # saving status for further use
     
