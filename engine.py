@@ -430,9 +430,10 @@ class engine:
             jobs_to_check.append(job_id)
 
     if len(jobs_to_check)==0:
+      self.log_debug('%s' % self.JOB_STATS)
       return
     
-    cmd = ["sacct","-j",",".join(jobs_to_check)]
+    cmd = ["sacct","-n","-p","-j",".batch,".join(jobs_to_check)+'.batch']
     self.log_debug('cmd so get new status : %s' % " ".join(cmd))
     try:
       output = subprocess.check_output(cmd)
@@ -442,16 +443,18 @@ class engine:
       else:
         status_error = True
       output=""
-    for l in output.split("\n"):
+    print output[:-1]
+    for l in output[:-1].split("\n"):
         try:
-          self.log_debug('l=%s'%l,4)
-          j=l.split(" ")[0].split(".")[0]
-          status=l.split(" ")[-8]
+          self.log_debug('l=%s'%l,2)
+          j=l.split("|")[0].split(".")[0]
+          status=l.split("|")[-3]
+          print status
           if status in JOB_POSSIBLE_STATES:
             self.log_debug('status=%s j=%s' % (status,j),1)
             if status[-1]=='+':
               status  = status[:-1]
-            self.JOB_STATUS[j] = self.JOB_STATUS[self.JOB_WORKDIR[j]] = status
+            self.JOB_STATUS[j] = status
             self.JOB_STATS[status].append(job_id)
         except:
           if self.args.debug:
