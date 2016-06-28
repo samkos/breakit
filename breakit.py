@@ -415,7 +415,6 @@ class breakit(engine):
       
     if len(jobs_to_kill):
       cmd = 'scancel ' + " ".join(jobs_to_kill)
-      print cmd
       self.system(cmd)
 
     self.save_task_stats()
