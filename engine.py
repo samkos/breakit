@@ -25,7 +25,7 @@ LOCK_EX = fcntl.LOCK_EX
 LOCK_SH = fcntl.LOCK_SH
 LOCK_NB = fcntl.LOCK_NB
 
-ENGINE_VERSION = '0.15'
+ENGINE_VERSION = '0.16'
 
 class LockException(Exception):
     # Error codes:
@@ -612,9 +612,9 @@ class engine:
   # os.system wrapped to enable Trace if needed
   #########################################################################
 
-  def system(self,cmd,comment="No comment",fake=False):
+  def system(self,cmd,comment="No comment",fake=False,verbosity=1):
 
-    self.log_debug("\tcurrently executing /%s/ :\n\t\t%s" % (comment,cmd))
+    self.log_debug("\tcurrently executing /%s/ :\n\t\t%s" % (comment,cmd),verbosity)
 
     output='FAKE EXECUTION'
     if not(fake) and not(self.args.fake):
@@ -629,7 +629,7 @@ class engine:
           if (line == ""): break
           output += line
       if len(output):
-        self.log_debug("output=+"+output,3)
+        self.log_debug("output=+"+output,verbosity+1)
     return output
 
 
