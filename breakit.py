@@ -563,13 +563,12 @@ class breakit(engine):
   # os.system wrapped to enable Trace if needed
   #########################################################################
 
-  def create_breakit_template(self):
+  def create_template(self):
 
     path = os.getenv('BREAKIT_PATH')
     if not(path):
       path='.'
-    l = "".join(open('%s/run_tests.py' % path,"r").readlines())
-    self.create_template("run_test.py__SEP2__"+l)
+    engine.create_template(self,path)
   
 if __name__ == "__main__":
     K = breakit()

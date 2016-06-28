@@ -1,0 +1,10 @@
+#!/bin/bash
+
+if [ -a ./my_breakit.py ]
+then
+   #echo python ./run_tests.py $*
+   python ./my_breakit.py $*
+else
+   #echo python $KTF_PATH/run_tests.py $*
+   python $KTF_PATH/breakit.py $*
+fi

@@ -118,6 +118,7 @@ class engine:
     self.parser.add_argument("--kill", action="store_true", help=argparse.SUPPRESS)
     self.parser.add_argument("--scratch", action="store_true", help=argparse.SUPPRESS)
     self.parser.add_argument("--restart", action="store_true", help=argparse.SUPPRESS)
+    self.parser.add_argument("--create-template", action="store_true", help='create template')
 
     self.parser.add_argument("--log-dir", type=str, help=argparse.SUPPRESS)
     self.parser.add_argument("--mail", type=str, help=argparse.SUPPRESS)
@@ -151,6 +152,9 @@ class engine:
     if self.args.kill:
         self.kill_jobs()
         sys.exit(0)
+
+    if self.args.create_template:
+        self.create_template()
         
   #########################################################################
   # set self.log file
@@ -675,34 +679,27 @@ class engine:
   #########################################################################
   # create template (matrix and job)
   #########################################################################
-  def create_template(self,l):
 
-    print
+  def create_template(self,path='.'):
 
-    for filename_content in l.split("__SEP1__"):
-      filename,content = filename_content.split("__SEP2__")
-      if os.path.exists(filename):
-        print "\t file %s already exists... skipping it!" % filename
-      else:
-        dirname = os.path.dirname(filename)
-        if not(os.path.exists(dirname)):
-          self.wrapped_system("mkdir -p %s" % dirname,comment="creating dir %s" % dirname)
-        executable = False
-        if filename[-1]=="*":
-          filename = filename[:-1]
-          executable = True
-        if os.path.exists(filename):
-          print "\tfile %s already exists... skipping it!" % filename
-        else:
-          f = open(filename,"w")
-          f.write(content)
-          f.close()
-          if executable:
-            self.wrapped_system("chmod +x %s" % filename)
-          self.log_info("file %s created " % filename)
+    for dirpath, dirs, files in os.walk("%s/templates" %  path): 
+       for filename in files:
+         filename_from = os.path.join(dirpath,filename)
+         filename_to   = filename_from.replace("%s/templates/" %  path,"./")
+         if os.path.exists(filename_to):
+           self.log_info("\t file %s already exists... skipping it!" % filename_to)
+         else:
+           dirname = os.path.dirname(filename_to)
+           self.log_debug('working on file %s in dir %s' % (filename_to,dirname))
 
+           if not(os.path.exists(dirname)):
+             self.system("mkdir -p %s" % dirname,comment="creating dir %s" % dirname)
+           self.system("cp %s %s" % (filename_from,filename_to),comment="creating file %s" % filename_to)
+           self.log_info('creating file %s' % (filename_to))
     sys.exit(0)
+      
 
 
+    
 if __name__ == "__main__":
   D = application("my_app")
