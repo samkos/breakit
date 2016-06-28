@@ -143,7 +143,9 @@ class breakit(engine):
                                '\n         ' + \
                                '\n  - the number of jobs you want in the queue with the option' + \
                                '\n           --chunk=<maximum number of jobs to queued simultaneously>')
-    
+
+    if self.args.restart:
+      self.kill_jobs(tasks_to_kill=map(str,self.ARRAY))
     
     if not(self.args.go_on):
       self.check_on_previous_computation()
@@ -325,6 +327,9 @@ class breakit(engine):
       nb = len(self.TASK_STATS[status])
       nb_all = nb_all + nb
       if nb:
+        # print tasks,status
+        # print ",".join(tasks)
+        #print RangeSet(",".join(tasks))
         self.log_info( '%10s -> %4d jobs : (%s) ' % (status,nb,RangeSet(",".join(tasks))))
 
     return nb_all
@@ -337,20 +342,21 @@ class breakit(engine):
 
     previous_running_tasks = self.check_jobs()
 
-    if (previous_running_tasks>0):
+    if (previous_running_tasks>0) and not(self.args.restart or self.args.scratch):
 
       self.log_info('WARNING!  A computation already occurred in this directory')
       self.log_info("""          to enforce the run, you can use one the following options : 
-                   --kill    to kill the ongoing calculation 
-                             and keep previous results   
-                   --status  to obtain a detailed status on 
-                             ongoing calculation
-                   --scratch to erase previous result, kill 
-                             an eventual ongoing calculation
-                             and start a new one from scratch
-                   --restart to continue or complete
-                             an eventual ongoing calculation
-                             and only erase the results that will be rerun """)
+                   --kill     to kill the ongoing computation 
+                              and keep previous results   
+                   --status   to obtain a detailed status on 
+                              ongoing computation
+                   --scratch  to erase previous result, kill 
+                              an eventual ongoing computation
+                              and start a new one from scratch
+                   --restart  to recompute tasks that failed or
+                              to continue or complete
+                              an even still ongoing computation
+                              and only erase the results that will be rerun """)
  
       sys.exit(1)
       
@@ -398,21 +404,30 @@ class breakit(engine):
   #########################################################################
   # kill jobs... after asking confirmation
   #########################################################################
-  def kill_jobs(self,force=False):
+  def kill_jobs(self,force=False,tasks_to_kill=[]):
 
     self.log_debug("killing all jobs",1)
     
     previous_running_tasks = self.check_jobs()
 
     jobs_to_kill = []
-    for status in JOB_ACTIVE_STATES + ('WAITING',):
-      for task in self.TASK_STATS[status]:
-        if status in JOB_ACTIVE_STATES:
-          jobs_to_kill.append("%s_%s" % (self.TASK_JOB_ID[task],task))
-        self.TASK_STATUS[task]='KILLED'
-      self.TASK_STATS['KILLED'] = self.TASK_STATS[status]
-      self.TASK_STATS[status] = []
-      
+    
+    if len(tasks_to_kill):
+      task_keys = self.TASK_STATUS.keys()
+      for task in tasks_to_kill:
+        if task in task_keys:
+          if self.TASK_STATUS[task] in JOB_ACTIVE_STATES:
+            jobs_to_kill.append("%s_%s" % (self.TASK_JOB_ID[task],task))
+          self.TASK_STATUS['%s' % task]='KILLED'
+    else:
+      for status in JOB_ACTIVE_STATES + ('WAITING',):
+        for task in self.TASK_STATS[status]:
+          if status in JOB_ACTIVE_STATES:
+            jobs_to_kill.append("%s_%s" % (self.TASK_JOB_ID[task],task))
+          self.TASK_STATUS[task]='KILLED'
+        self.TASK_STATS['KILLED'] = self.TASK_STATS[status]
+        self.TASK_STATS[status] = []
+        
     if len(jobs_to_kill):
       cmd = 'scancel ' + " ".join(jobs_to_kill)
       self.system(cmd)
