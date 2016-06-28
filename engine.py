@@ -21,6 +21,9 @@ JOB_POSSIBLE_STATES = ('PENDING','RUNNING','SUSPENDED','COMPLETED',\
                        'NODE_FAIL','PREEMPTED','BOOT_FAIL','COMPLETING',\
                        'CONFIGURING','RESIZING','SPECIAL_EXIT')
 
+JOB_ACTIVE_STATES   = ('PENDING','RUNNING','SUSPENDED','COMPLETING',\
+                       'CONFIGURING','RESIZING')
+
 LOCK_EX = fcntl.LOCK_EX
 LOCK_SH = fcntl.LOCK_SH
 LOCK_NB = fcntl.LOCK_NB
@@ -145,9 +148,9 @@ class engine:
         self.log_info("restart from scratch")
         self.log_info("killing previous jobs...")
         self.kill_jobs()
-        self.log_info("deleting JOBS and SAVE DIR")
-        shutil.rmtree(self.JOB_DIR)
-        shutil.rmtree(self.SAVE_DIR)
+        self.log_info("cleaning environment...")
+        self.clean()
+
                                     
     if self.args.kill:
         self.kill_jobs()

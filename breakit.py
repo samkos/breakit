@@ -43,7 +43,7 @@ import glob
 
 import argparse
 
-from engine import engine,JOB_POSSIBLE_STATES
+from engine import engine,JOB_POSSIBLE_STATES, JOB_ACTIVE_STATES
 from env import *
 from ClusterShell.NodeSet import *
 
@@ -146,6 +146,7 @@ class breakit(engine):
     
     
     if not(self.args.go_on):
+      self.check_on_previous_computation()
       self.prepare_computation()
       job = self.job_submit(1,self.TO)
       self.log_debug("Saving Job Ids...",1)
@@ -245,7 +246,7 @@ class breakit(engine):
   #########################################################################
   def check_jobs(self):
     #
-    TASK_POSSIBLE_STATES = JOB_POSSIBLE_STATES + ('SUBMITTED','OK','NOK','WAITING')
+    TASK_POSSIBLE_STATES = JOB_POSSIBLE_STATES + ('SUBMITTED','OK','NOK','WAITING','KILLED')
     
     self.log_debug("continuing... taking lock",4)
     lock_file = self.take_lock(self.TASK_LOCK_FILE)
@@ -259,8 +260,8 @@ class breakit(engine):
         l=(status_saved,task,job,exit_code) = os.path.basename(f).split(';')
         self.TASK_STATUS [task] = status_saved
         self.TASK_JOB_ID [task] = job
-        self.system('mv %s %s/' % (f,self.LOG_DIR),verbosity=4)
-        #os.unlink(f)
+        #self.system('mv %s %s/' % (f,self.LOG_DIR),verbosity=4)
+        os.unlink(f)
 
     # updating status of tasks already spawned by breakit
     
@@ -298,8 +299,8 @@ class breakit(engine):
         l=(status_saved,task,job,exit_code) = os.path.basename(f).split(';')
         self.TASK_STATUS [task] = status_saved
         self.TASK_JOB_ID [task] = job
-        self.system('mv %s %s/' % (f,self.LOG_DIR),verbosity=4)
-        #os.unlink(f)
+        #self.system('mv %s %s/' % (f,self.LOG_DIR),verbosity=4)
+        os.unlink(f)
 
     # saving status for further use
     
@@ -317,10 +318,46 @@ class breakit(engine):
     for (task,status) in self.TASK_STATUS.items():
       self.TASK_STATS[status].append(task)
 
+    nb_all = 0
+    self.log_info( '')
+    self.log_info( '--- Current status at %s --------' % time.ctime())
     for (status,tasks) in self.TASK_STATS.items():
       nb = len(self.TASK_STATS[status])
+      nb_all = nb_all + nb
       if nb:
-        print '%10s -> %4d jobs : (%s) ' % (status,nb,RangeSet(",".join(tasks)))
+        self.log_info( '%10s -> %4d jobs : (%s) ' % (status,nb,RangeSet(",".join(tasks))))
+
+    return nb_all
+
+  #########################################################################
+  # Check for previous computation in same directory
+  #########################################################################
+
+  def check_on_previous_computation(self):
+
+    previous_running_tasks = self.check_jobs()
+
+    if (previous_running_tasks>0):
+
+      self.log_info('WARNING!  A computation already occurred in this directory')
+      self.log_info("""          to enforce the run, you can use one the following options : 
+                   --kill    to kill the ongoing calculation 
+                             and keep previous results   
+                   --status  to obtain a detailed status on 
+                             ongoing calculation
+                   --scratch to erase previous result, kill 
+                             an eventual ongoing calculation
+                             and start a new one from scratch
+                   --restart to continue or complete
+                             an eventual ongoing calculation
+                             and only erase the results that will be rerun """)
+ 
+      sys.exit(1)
+      
+    pass
+    
+        
+
 
   #########################################################################
   # starting the process
@@ -347,33 +384,44 @@ class breakit(engine):
 
 
   #########################################################################
+  # cleaning environment
+  #########################################################################
+  def clean(self,force=False):
+    for d in [self.JOB_DIR,self.SAVE_DIR]:
+      if os.path.exists(d):
+        self.log_info("deleting directory %s..." % d)
+        shutil.rmtree(d)        
+      self.TASK_STATUS = {}
+      self.TASK_JOB_ID = {}
+        
+    
+  #########################################################################
   # kill jobs... after asking confirmation
   #########################################################################
   def kill_jobs(self,force=False):
 
     self.log_debug("killing all jobs",1)
-
-    existing_jobs = self.get_current_jobs_status()
-
-    if len(existing_jobs):
-      if force:
-        self.log_debug("killed forced... not asking confirmation...")
-      else:
-        input_var = raw_input("Do you really want to kill all running jobs ? (yes/no) ")
     
-        if not(input_var == "yes"):
-          self.error("No clear confirmation... giving up!")
-    
-      for j in existing_jobs.keys():
-        self.log_debug("killing job %s -> ?? " % (j),1)
-        self.log_debug("   with command : /%s %s/ " % (self.SCHED_KIL,j),2)
-        output = subprocess.Popen([self.SCHED_KIL,j],\
-                                  stdout=subprocess.PIPE).communicate()[0].split("\n")
+    previous_running_tasks = self.check_jobs()
 
-      self.log.info("All jobs killed with success")
-      self.log.info("="*60)
-      print("All jobs killed with success")
-      #self.send_mail("All job have been killed with success")
+    jobs_to_kill = []
+    for status in JOB_ACTIVE_STATES + ('WAITING',):
+      for task in self.TASK_STATS[status]:
+        if status in JOB_ACTIVE_STATES:
+          jobs_to_kill.append("%s_%s" % (self.TASK_JOB_ID[task],task))
+        self.TASK_STATUS[task]='KILLED'
+      self.TASK_STATS['KILLED'] = self.TASK_STATS[status]
+      self.TASK_STATS[status] = []
+      
+    if len(jobs_to_kill):
+      cmd = 'scancel ' + " ".join(jobs_to_kill)
+      print cmd
+      self.system(cmd)
+
+    self.save_task_stats()
+    
+    if True:
+      pass
     else:
       self.log.info("No job still exists for this study...")
 
