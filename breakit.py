@@ -43,7 +43,7 @@ import glob
 
 import argparse
 
-from engine import engine,JOB_POSSIBLE_STATES, JOB_ACTIVE_STATES
+from engine import *
 from env import *
 from ClusterShell.NodeSet import *
 
@@ -448,14 +448,14 @@ class breakit(engine):
       task_keys = self.TASK_STATUS.keys()
       for task in map(str,tasks_to_kill):
         if task in task_keys:
-          if self.TASK_STATUS[task] in JOB_ACTIVE_STATES:
+          if self.TASK_STATUS[task] in JOB_ACTIVE_STATES and not(int(task) % (self.args.chunk/4)==1):
             jobs_to_kill.append("%s_%s" % (self.TASK_JOB_ID[task],task))
           self.TASK_STATUS[task]='KILLED'
-      print self.TASK_STATUS
+      #print self.TASK_STATUS
     else:
       for status in JOB_ACTIVE_STATES + ('WAITING',):
         for task in self.TASK_STATS[status]:
-          if status in JOB_ACTIVE_STATES:
+          if status in JOB_ACTIVE_STATES and not(int(task) % (self.args.chunk/4)==1):
             jobs_to_kill.append("%s_%s" % (self.TASK_JOB_ID[task],task))
           self.TASK_STATUS[task]='KILLED'
         self.TASK_STATS['KILLED'] = self.TASK_STATS[status]
@@ -463,7 +463,8 @@ class breakit(engine):
         
     if len(jobs_to_kill):
       cmd = 'scancel ' + " ".join(jobs_to_kill)
-      #self.system(cmd)
+      self.log_info(cmd)
+      self.system(cmd)
 
     
     self.display_status('after-kill')
@@ -627,7 +628,6 @@ class breakit(engine):
           job = job + """
               if [ $? -ne 0 ] ; then
                   echo "[ERROR] FAILED in Job: stopping everything..."
-                  %s 
                   exit 1
               else \n """ 
           job = job + "\n# START OF ORIGINAL USER SCRIPT  -------------------\n"
