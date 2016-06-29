@@ -147,6 +147,7 @@ class breakit(engine):
     if self.args.restart:
       self.kill_jobs(tasks_to_kill=map(str,self.ARRAY))
     
+    self.load_task_stats()
     if not(self.args.go_on):
       self.check_on_previous_computation()
       self.prepare_computation()
@@ -157,6 +158,11 @@ class breakit(engine):
     else:
       self.manage_jobs()
 
+    if self.args.taskid:
+      print self.TASK_STATUS
+      if self.TASK_STATUS['%s' % self.args.taskid]=='KILLED':
+        self.log_info('task %s was killed by the user. Giving up this job')
+        sys.exit(1)
 
   #########################################################################
   # save_workspace
@@ -242,6 +248,7 @@ class breakit(engine):
                               range_last=range_first+self.args.chunk/4-1,
                               dep=self.args.jobid)
         self.save()
+        self.save_task_stats()
 
   #########################################################################
   # manage_jobs()
@@ -387,6 +394,7 @@ class breakit(engine):
 
     for task in self.ARRAY:
       self.TASK_STATUS['%s' % task] = 'WAITING'
+    self.save_task_stats()
 
 
   #########################################################################
@@ -407,12 +415,16 @@ class breakit(engine):
   def kill_jobs(self,force=False,tasks_to_kill=[]):
 
     self.log_debug("killing all jobs",1)
+
+    if self.args.array:
+      tasks_to_kill = RangeSet(self.args.array)
     
     previous_running_tasks = self.check_jobs()
 
     jobs_to_kill = []
     
     if len(tasks_to_kill):
+      self.log_debug('killing specific tasks : %s' % tasks_to_kill)
       task_keys = self.TASK_STATUS.keys()
       for task in tasks_to_kill:
         if task in task_keys:
@@ -480,6 +492,7 @@ class breakit(engine):
       status = 'SUBMITTED'
       filename = '%s/%s;%s;%s;%s' % (self.SAVE_DIR,status,i,job_id,0)
       open(filename,"w").close()
+      self.TASK_STATUS['%s' % i ] = 'SUBMITTED'
       
     self.log_debug('submitting job %s Job # %s_%s-%s' % (job_name,job_id,range_first,range_last),4)
 
