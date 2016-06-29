@@ -505,19 +505,15 @@ class breakit(engine):
     f.close()
 
     if filter:
-      tasks = []
+      tasks = [str(self.ARRAY[(range_first-1)])]
       for task in map(str,self.ARRAY[(range_first-1):range_last]):
         if not(self.TASK_STATUS[task] == 'KILLED'):
           tasks.append(task)
-      if len(tasks)==0:
-        return None
       tasks = RangeSet(",".join(tasks))
     else:      
       tasks = self.ARRAY[(range_first-1):range_last]
 
 
-    print 'xxxxxxxx',tasks,len(tasks)
-    
     new_job = { 'name' : job_name,
                 'comes_after': dep,
                 'depends_on' : dep,
@@ -529,11 +525,12 @@ class breakit(engine):
 
 
     (job_id,cmd)  = self.submit(new_job)
-    for i in tasks:
-      status = 'SUBMITTED'
-      filename = '%s/%s;%s;%s;%s' % (self.SAVE_DIR,status,i,job_id,0)
-      open(filename,"w").close()
-      self.TASK_STATUS['%s' % i ] = 'SUBMITTED'
+    for i in map(str,tasks):
+      if not(self.TASK_STATUS[i] == 'KILLED'):
+        status = 'SUBMITTED'
+        filename = '%s/%s;%s;%s;%s' % (self.SAVE_DIR,status,i,job_id,0)
+        open(filename,"w").close()
+        self.TASK_STATUS[i] = 'SUBMITTED'
       
     self.log_debug('submitting job %s Job # %s_%s-%s' % (job_name,job_id,range_first,range_last),4)
 
