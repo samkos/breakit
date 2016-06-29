@@ -49,6 +49,9 @@ from ClusterShell.NodeSet import *
 
 ERROR = -1
 
+TASK_POSSIBLE_STATES = JOB_POSSIBLE_STATES + ('SUBMITTED','OK','NOK','WAITING','KILLED')
+
+
 
 class breakit(engine):
 
@@ -147,17 +150,25 @@ class breakit(engine):
     if self.args.restart:
       self.kill_jobs(tasks_to_kill=map(str,self.ARRAY))
     
+    lock_file = self.take_lock(self.TASK_LOCK_FILE)
+    self.log_debug("got lock!",4)
+    self.load()
     self.load_task_stats()
+
     if not(self.args.go_on):
       self.check_on_previous_computation()
       self.prepare_computation()
       job = self.job_submit(1,self.TO)
       self.log_debug("Saving Job Ids...",1)
-      self.save()
-      self.save_task_stats()
     else:
       self.manage_jobs()
 
+    # saving status for further use
+    self.save()
+    self.save_task_stats(take_lock=False)
+    self.release_lock(lock_file)
+    self.log_debug('lock released')
+      
     if self.args.taskid:
       print self.TASK_STATUS
       if self.TASK_STATUS['%s' % self.args.taskid]=='KILLED':
@@ -247,21 +258,19 @@ class breakit(engine):
                               range_first=range_first,
                               range_last=range_first+self.args.chunk/4-1,
                               dep=self.args.jobid)
-        self.save()
-        self.save_task_stats()
 
   #########################################################################
-  # manage_jobs()
+  # check_jobs update current job status
   #########################################################################
-  def check_jobs(self):
+  def check_jobs(self,take_lock=True):
     #
-    TASK_POSSIBLE_STATES = JOB_POSSIBLE_STATES + ('SUBMITTED','OK','NOK','WAITING','KILLED')
-    
-    self.log_debug("continuing... taking lock",4)
-    lock_file = self.take_lock(self.TASK_LOCK_FILE)
-    self.log_debug("got lock!",4)
+    if take_lock:
+      self.log_debug("continuing... taking lock",4)
+      lock_file = self.take_lock(self.TASK_LOCK_FILE)
+      self.log_debug("got lock!",4)
 
-    self.load_task_stats()
+      self.load()
+      self.load_task_stats()
 
     # gathering information on tasks just submitted butn ot scheduled
     for status in ['SUBMITTED']:
@@ -279,7 +288,7 @@ class breakit(engine):
       #print task,status
       if status in ('RUNNING','SUBMITTED','PENDING'):
         self.log_debug('checking on last status of task %s of previous status /%s/' % \
-                       (task,status))
+                       (task,status),2)
         additional_check.append("%s_%s" % (self.TASK_JOB_ID[task],task))
 
     if len(additional_check):
@@ -287,11 +296,11 @@ class breakit(engine):
         output =  self.system(cmd)
         jobs = output[:-1].split("\n")
         if len(jobs):
-          self.log_debug('squeue result: \n >>>%s<<' % output)
+          self.log_debug('squeue result: \n >>>%s<<' % output,2)
           for l in jobs:
             if len(l)<3:
               continue
-            self.log_debug('line scanned: \n >>>%s<<' % l)
+            self.log_debug('line scanned: \n >>>%s<<' % l,2)
             l = clean_line(l)
             (id,status) = l.split(" ")
             #id = '%s' % id
@@ -312,12 +321,19 @@ class breakit(engine):
         os.unlink(f)
 
     # saving status for further use
-    
-    self.save_task_stats(take_lock=False)
-    self.release_lock(lock_file)
-    self.log_debug('lock released')
+    if take_lock:
+      self.save()
+      self.save_task_stats(take_lock=False)
+      self.release_lock(lock_file)
+      self.log_debug('lock released')
 
-    # computing and printing dashboard..
+    return self.display_status('o')
+  
+  #########################################################################
+  # display_status
+  #########################################################################
+    
+  def display_status(self,msg=''):
     
     self.TASK_STATS = {}
     #print TASK_POSSIBLE_STATES
@@ -329,7 +345,7 @@ class breakit(engine):
 
     nb_all = 0
     self.log_info( '')
-    self.log_info( '--- Current status at %s --------' % time.ctime())
+    self.log_info( '--- Current status at %s --%s------' % (time.ctime(),msg))
     for (status,tasks) in self.TASK_STATS.items():
       nb = len(self.TASK_STATS[status])
       nb_all = nb_all + nb
@@ -337,8 +353,8 @@ class breakit(engine):
         # print tasks,status
         # print ",".join(tasks)
         #print RangeSet(",".join(tasks))
-        self.log_info( '%10s -> %4d jobs : (%s) ' % (status,nb,RangeSet(",".join(tasks))))
-
+        self.log_info( '%10s -> %4d jobs : %s ' % (status,nb,RangeSet(",".join(tasks))))
+  
     return nb_all
 
   #########################################################################
@@ -347,7 +363,7 @@ class breakit(engine):
 
   def check_on_previous_computation(self):
 
-    previous_running_tasks = self.check_jobs()
+    previous_running_tasks = self.check_jobs(take_lock=False)
 
     if (previous_running_tasks>0) and not(self.args.restart or self.args.scratch):
 
@@ -394,7 +410,6 @@ class breakit(engine):
 
     for task in self.ARRAY:
       self.TASK_STATUS['%s' % task] = 'WAITING'
-    self.save_task_stats()
 
 
   #########################################################################
@@ -416,21 +431,27 @@ class breakit(engine):
 
     self.log_debug("killing all jobs",1)
 
+    lock_file = self.take_lock(self.TASK_LOCK_FILE)
+    self.log_debug("got lock!",4)
+    self.load()
+    self.load_task_stats()
+    
     if self.args.array:
       tasks_to_kill = RangeSet(self.args.array)
     
-    previous_running_tasks = self.check_jobs()
+    previous_running_tasks = self.check_jobs(take_lock=False)
 
     jobs_to_kill = []
     
     if len(tasks_to_kill):
       self.log_debug('killing specific tasks : %s' % tasks_to_kill)
       task_keys = self.TASK_STATUS.keys()
-      for task in tasks_to_kill:
+      for task in map(str,tasks_to_kill):
         if task in task_keys:
           if self.TASK_STATUS[task] in JOB_ACTIVE_STATES:
             jobs_to_kill.append("%s_%s" % (self.TASK_JOB_ID[task],task))
-          self.TASK_STATUS['%s' % task]='KILLED'
+          self.TASK_STATUS[task]='KILLED'
+      print self.TASK_STATUS
     else:
       for status in JOB_ACTIVE_STATES + ('WAITING',):
         for task in self.TASK_STATS[status]:
@@ -444,8 +465,15 @@ class breakit(engine):
       cmd = 'scancel ' + " ".join(jobs_to_kill)
       self.system(cmd)
 
-    self.save_task_stats()
     
+    self.display_status('after-kill')
+
+    # saving status for further use
+    self.save()
+    self.save_task_stats(take_lock=False)
+    self.release_lock(lock_file)
+    self.log_debug('lock released')
+
     if True:
       pass
     else:
@@ -535,6 +563,7 @@ class breakit(engine):
 
     for j in range(range_first,range_first+self.args.chunk,self.args.chunk/4):
       job_id=self.job_array_submit(job_name,job_file,j,j+self.args.chunk/4-1,dep)
+
 
     self.log_debug('submitted job array [%s,%s] successfully...' % (range_first,range_last),1) 
 
