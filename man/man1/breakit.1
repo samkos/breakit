@@ -1,4 +1,4 @@
-.TH breakit 1  "June 14, 2016" "version 0.2" "USER COMMANDS"
+.TH breakit 1  "June 14, 2016" "version 0.3" "USER COMMANDS"
 .SH NAME
 breakit \- KSL many jobs automated submitter
 .
@@ -6,8 +6,9 @@ breakit \- KSL many jobs automated submitter
 .SH SYNOPSIS
 .IX Header "SYNOPSIS"
 breakit  \fB\-\-job=\fR\fIany-Slurm-Job\fR
-         \fB\-\-array=\fR\fIarray-indexes\fR [or \fB\-\-range=\fR\fITotal-number-of-jobs\fR]
+         \fB\-\-array=\fR\fIarray-indexes\fR 
          [\fB\-\-chunk\fR=\fR\fIMaximum-number-of-jobs-to-be-seen-in-the-queue\fR]
+         [\fB\-\-kill\fR | \fB\-\-status\fR | \fB\-\-restart \fR | \fB\-\-scratch\fR ]	
 .
 .
 .
@@ -39,13 +40,17 @@ The \fB--array\fR option accept the same type of input as the sbatch command.
 .PP
 If no option \fB--chunk\fR is mentionned, default number of jobs queued simultaneously is set to 8.
 .PP
-The option \fB--range\fR is present to insure backward compatibility with breakit 0.1:  --range=100 is strictly equivalent to --array=1-100.
+The option \fB--kill\fR kills all the jobs of the current study.
 .PP
-To cancel the full set of jobs, an option \fB--kill\fR is under development
-and testing. In the meantime, when choosing a different name for all the jobs launched through \fBbreakit\fR
-the following Slurm command can be used:
+The option \fB--status\fR gives a detailed status of the jobs
+currently running, pending, waiting to be submitted or finished
+weither completed or returned with failure.
 .PP
-.BI "   scancel  \-n=\fIname-of-job\fR"
+The option \fB--scratch\fR kills all the running or waiting jobs and
+allows the user to restart a new study from scratch in the same
+directory. An already existing and even currently running study can
+also be partially restarted, resumed or extended using
+\fB--restart\fR.
 .SH AUTHOR
 Written by Samuel Kortas (samuel.kortas (at) kaust.edu.sa)
 .SH "REPORTING BUGS"
