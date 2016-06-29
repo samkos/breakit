@@ -257,7 +257,7 @@ class breakit(engine):
         self.job_array_submit("job.template", self.args.job_file_path,
                               range_first=range_first,
                               range_last=range_first+self.args.chunk/4-1,
-                              dep=self.args.jobid)
+                              dep=self.args.jobid,filter=True)
 
   #########################################################################
   # check_jobs update current job status
@@ -463,7 +463,7 @@ class breakit(engine):
         
     if len(jobs_to_kill):
       cmd = 'scancel ' + " ".join(jobs_to_kill)
-      self.system(cmd)
+      #self.system(cmd)
 
     
     self.display_status('after-kill')
@@ -483,7 +483,7 @@ class breakit(engine):
   # submit a job_array
   #########################################################################
 
-  def job_array_submit(self,job_name, job_file, range_first, range_last, dep=""):
+  def job_array_submit(self,job_name, job_file, range_first, range_last, dep="", filter=False):
 
     range_last = min(range_last,self.TO)
 
@@ -504,19 +504,32 @@ class breakit(engine):
     f.write(job_content)
     f.close()
 
-      
+    if filter:
+      tasks = []
+      for task in map(str,self.ARRAY[(range_first-1):range_last]):
+        if not(self.TASK_STATUS[task] == 'KILLED'):
+          tasks.append(task)
+      if len(tasks)==0:
+        return None
+      tasks = RangeSet(",".join(tasks))
+    else:      
+      tasks = self.ARRAY[(range_first-1):range_last]
+
+
+    print 'xxxxxxxx',tasks,len(tasks)
+    
     new_job = { 'name' : job_name,
                 'comes_after': dep,
                 'depends_on' : dep,
                 'command' : os.path.abspath("%s" % job_script),
                 'submit_dir' : os.getcwd(),
-                'array' :self.ARRAY[(range_first-1):range_last],
+                'array' : tasks,
     }
 
 
 
     (job_id,cmd)  = self.submit(new_job)
-    for i in self.ARRAY[(range_first-1):range_last]:
+    for i in tasks:
       status = 'SUBMITTED'
       filename = '%s/%s;%s;%s;%s' % (self.SAVE_DIR,status,i,job_id,0)
       open(filename,"w").close()
