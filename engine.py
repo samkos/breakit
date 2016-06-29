@@ -417,7 +417,7 @@ class engine:
           f.close()
     except:
         self.error('[load]  problem encountered while loading current workspace\n---->  rerun with -d to have more information',
-                          exit=True, exception=self.args.debug)
+                          exit=True, exception=True)  #self.args.debug)
 
   #########################################################################
   # get status of all jobs ever launched
@@ -549,6 +549,8 @@ class engine:
         for m in message.split("\n"):
           try:
             #print "[ERROR]  %s : " % m
+            if len(self.LOG_PREFIX):
+                m = "%s:%s" % (self.LOG_PREFIX,m)
             self.log.error(m)
           except:
             print "[ERROR Pb processing] %s" % m

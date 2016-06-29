@@ -78,7 +78,7 @@ class breakit(engine):
     self.TASK_STATUS = {}
     self.TASK_JOB_ID = {}
     
-    self.load()
+    #self.load()
     
 
 
@@ -107,7 +107,7 @@ class breakit(engine):
     self.parser.add_argument("--exit-code", type=int , default=0,  help=argparse.SUPPRESS)
     self.parser.add_argument("--jobid", type=int ,  help=argparse.SUPPRESS)
     self.parser.add_argument("--job-file-path", type=str , help=argparse.SUPPRESS)
-    self.parser.add_argument("--taskid", type=int ,  help=argparse.SUPPRESS)
+    self.parser.add_argument("--taskid", type=int , default=0, help=argparse.SUPPRESS)
     self.parser.add_argument("--array-current-first", type=int , help=argparse.SUPPRESS)
     self.parser.add_argument("--attempt", type=int , default=0, help=argparse.SUPPRESS)
 
@@ -118,6 +118,8 @@ class breakit(engine):
   #########################################################################
   def run(self):
     #
+    self.set_log_prefix('%s' % self.args.taskid)
+    
     if self.args.status:
       self.check_jobs()
       sys.exit(0)
@@ -127,7 +129,7 @@ class breakit(engine):
       self.finalize()
       sys.exit(0)
 
-    self.log_info('starting Task %s' % self.args.taskid,1)
+    self.log_info('starting Task %s' % self.args.taskid)
 
     if self.args.job:
       self.args.job = os.path.expanduser(self.args.job)
@@ -215,8 +217,9 @@ class breakit(engine):
           self.TASK_JOB_ID = pickle.load(f)
           f.close()
     except:
-        self.error('[load]  problem encountered while loading current workspace\n---->  rerun with -d to have more information',
-                          exit=True, exception=self.args.debug)
+        self.error('[load_task_stats]  problem encountered while loading task stats'
+                   +'\n---->  rerun with -d to have more information',
+                          exit=True, exception=True) #self.args.debug)
   #########################################################################
   # finalizing task
   #########################################################################
