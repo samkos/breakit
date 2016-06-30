@@ -107,6 +107,7 @@ class breakit(engine):
     self.parser.add_argument("--exit-code", type=int , default=0,  help=argparse.SUPPRESS)
     self.parser.add_argument("--jobid", type=int ,  help=argparse.SUPPRESS)
     self.parser.add_argument("--job-file-path", type=str , help=argparse.SUPPRESS)
+    self.parser.add_argument("--job-template-name", type=str , help=argparse.SUPPRESS)
     self.parser.add_argument("--taskid", type=int , default=0, help=argparse.SUPPRESS)
     self.parser.add_argument("--array-current-first", type=int , help=argparse.SUPPRESS)
     self.parser.add_argument("--attempt", type=int , default=0, help=argparse.SUPPRESS)
@@ -242,6 +243,9 @@ class breakit(engine):
   #########################################################################
   def manage_jobs(self):
     #
+
+    self.JOB_TEMPLATE_NAME = self.args.job_template_name
+    
     if not(self.ARRAY[self.args.array_current_first-1] == self.args.taskid):
       self.log_debug('not in charge to spawn more jobs: MY_ARRAY_CURRENT_FIRST=%s not equals MY_TASK=%s ' % \
                      (self.ARRAY[self.args.array_current_first-1],self.args.taskid))
@@ -551,7 +555,7 @@ class breakit(engine):
     job_template = self.create_job_template()
 
     #job_name = "%d-%d-%%K" % (range_first,range_last)
-    job_name = "job_template"
+    job_name = self.JOB_TEMPLATE_NAME
     # job_dir = "%s/%03d" %  (self.JOB_DIR,n)
     # if os.path.exists(job_dir) and not (n+1 in self.JOB_TO_RELAUNCH.keys()):
     #   self.error_report("Something is going weird...\ndirectory %s allready exists..." % job_dir)
@@ -570,7 +574,7 @@ class breakit(engine):
     job_content = job_content.replace("__JOB_DIR__",self.JOB_DIR)
 
             
-    job_file = '%s/%s.job' % (self.SAVE_DIR,job_name)
+    job_file = '%s/%s' % (self.SAVE_DIR,job_name)
     f=open(job_file,'w')
     f.write(job_content)
     f.close()
@@ -593,7 +597,8 @@ class breakit(engine):
     job = ""
     
     job_name = self.args.job
-    job_file_path = '%s/job_template.job' % (self.SAVE_DIR) #,job_name)
+    self.JOB_TEMPLATE_NAME = "job_template_%s" % (time.time())
+    job_file_path = '%s/%s' % (self.SAVE_DIR,self.JOB_TEMPLATE_NAME) #,job_name)
 
     if not(os.path.exists(job_name)):
         self.error("Template job file %s missing..." % job_name)
@@ -616,8 +621,9 @@ class breakit(engine):
 
           script = "%s -u %s  --jobid=$job_id  --taskid=$task_id --array-current-first=__ARRAY_CURRENT_FIRST__ " % \
                 (sys.executable,os.path.realpath(__file__)) +\
-                "--go-on --log-dir=%s  --array=%s --chunk=%s --job-file-path=%s --job %s %s %s" % \
-              (   self.LOG_DIR,self.ARRAY,self.args.chunk,job_file_path, self.args.job,"-d "*self.args.debug,"-i "*self.args.info)
+                "--go-on --log-dir=%s  --array=%s --chunk=%s --job-file-path=%s --job-template-name=%s --job %s %s %s" % \
+              (   self.LOG_DIR,self.ARRAY,self.args.chunk,job_file_path, self.JOB_TEMPLATE_NAME,
+                  self.args.job,"-d "*self.args.debug,"-i "*self.args.info)
 
           if self.args.fake:
             script = script + " --fake"
