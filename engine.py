@@ -82,7 +82,6 @@ class engine:
     self.parser = argparse.ArgumentParser()
     self.initialize_parser()
     self.args = self.parser.parse_args()
-
     
     # initialize logs
     self.initialize_log_files()

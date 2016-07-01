@@ -111,6 +111,7 @@ class breakit(engine):
     self.parser.add_argument("--taskid", type=int , default=0, help=argparse.SUPPRESS)
     self.parser.add_argument("--array-current-first", type=int , help=argparse.SUPPRESS)
     self.parser.add_argument("--attempt", type=int , default=0, help=argparse.SUPPRESS)
+    self.parser.add_argument("--yes", action="store_true", help=argparse.SUPPRESS)
 
     engine.initialize_parser(self)
     
@@ -193,6 +194,8 @@ class breakit(engine):
     #print "saving variables to file "+workspace_file
     workspace_file = self.TASK_FILE
     f = open(workspace_file+".new", "wb" )
+    pickle.dump(self.args.chunk,f)
+    pickle.dump(self.args.job,f)
     pickle.dump(self.TASK_STATUS,f)
     pickle.dump(self.TASK_JOB_ID,f)
     f.close()
@@ -214,9 +217,13 @@ class breakit(engine):
       #print "loading variables from file "+workspace_file
       if os.path.exists(self.TASK_FILE):
           f = open( self.TASK_FILE, "rb" )
+          self.args.chunk = pickle.load(f)
+          self.args.job = pickle.load(f)
           self.TASK_STATUS = pickle.load(f)
           self.TASK_JOB_ID = pickle.load(f)
           f.close()
+          if self.args.debug:
+            print self.args
     except:
         self.error('[load_task_stats]  problem encountered while loading task stats'
                    +'\n---->  rerun with -d to have more information',
@@ -449,7 +456,25 @@ class breakit(engine):
     previous_running_tasks = self.check_jobs(take_lock=False)
 
     jobs_to_kill = []
-    
+
+    self.log_info('')
+    if len(tasks_to_kill):
+      self.log_info('WARNING!!! I will kill all the following tasks : %s ' % \
+                    tasks_to_kill)
+    else:
+      self.log_info('WARNING!!! I will kill All the tasks running or to be run')
+
+    if self.args.yes:
+      self.log_info('WARNING!!! --> it is ok because of --yes parameter')
+    else:
+      input_var = raw_input("Is this correct ? (yes/no) ")
+      if not(input_var == "yes"):
+        self.log_info("ABORTING: No clear confirmation... giving up!")
+        self.release_lock(lock_file)
+        self.log_debug('lock released')
+        sys.exit(1)
+      
+      
     if len(tasks_to_kill):
       self.log_debug('killing specific tasks : %s' % tasks_to_kill)
       task_keys = self.TASK_STATUS.keys()

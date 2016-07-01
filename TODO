@@ -1,32 +1,9 @@
 
-put a lock aroung save_workspace
+
+do not overwrite self.job if specified in command line or print a warning and add --force
 
 
 check why check method can still submit jobs
 
 
 
-relire le --chunk et --job pour un restart...
-
-
-gC
-breakit --job=job.test --array=1-500 -c 40 
-breakit --job=job.test --array=300-400 -c 40 --restart -d
-t; b 
-t; b
-t; b
-t
-b
-ls -l *.err | grep -v 'kw-users 0'
-grep ERROR .breakit/LOGS/breakit.log
-
-
-why array=300-400?????????
-
-in this case 100.out looks like this:
-		python /home/kortass/BREAKIT/breakit.pyc --jobid=71397 --taskid=100 --array-current-first=91 --go-on --log-dir=/home/kortass/INTIKHAB/.breakit/LOGS --array=300-400 --chunk=40 --job-file-path=/home/kortass/INTIKHAB/.breakit/SAVE/job_template.job --job job.test -d
-		[DEBUG] initialize environment
-		[DEBUG] copying file my_breakit.py into SAVE directory
-		[DEBUG] ARRAY=300-400
-		[DEBUG] not in charge to spawn more jobs: MY_ARRAY_CURRENT_FIRST=390 not equals MY_TASK=100
-		
