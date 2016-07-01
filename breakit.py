@@ -49,7 +49,7 @@ from ClusterShell.NodeSet import *
 
 ERROR = -1
 
-TASK_POSSIBLE_STATES = JOB_POSSIBLE_STATES + ('SUBMITTED','OK','NOK','WAITING','KILLED')
+TASK_POSSIBLE_STATES = JOB_POSSIBLE_STATES + ('SUBMITTED','OK','NOK','WAITING','KILLED','UNKNOWN')
 
 
 
@@ -276,7 +276,7 @@ class breakit(engine):
   #########################################################################
   # check_jobs update current job status
   #########################################################################
-  def check_jobs(self,take_lock=True,output=True):
+  def check_jobs(self,take_lock=True,display=True):
     #
     if take_lock:
       self.log_debug("continuing... taking lock",4)
@@ -301,12 +301,13 @@ class breakit(engine):
     task_job_ids = self.TASK_JOB_ID.keys()
     for (task,status) in self.TASK_STATUS.items():
       #print task,status
-      if status in ('RUNNING','SUBMITTED','PENDING'):
+      if status in ('RUNNING','SUBMITTED','PENDING','UNKNOWN'):
         self.log_debug('checking on last status of task %s of previous status /%s/' % \
                        (task,status),2)
         if not(task in  task_job_ids):
-          self.log_info('WARNING!!! %s has no corresponding Job ID! ' % task)
-          print self.TASK_JOB_ID
+          self.log_info('WARNING!!! %s of previous status %s has no corresponding Job ID! ' % (task,status))
+          if self.args.debug:
+            print self.TASK_JOB_ID
           continue
         additional_check.append("%s_%s" % (self.TASK_JOB_ID[task],task))
 
@@ -314,7 +315,15 @@ class breakit(engine):
         cmd = 'squeue -h -l -o "%.20i %.20T" -r ' + '-u %s | grep _'  % (getpass.getuser())
         output =  self.system(cmd)
         jobs = output[:-1].split("\n")
-        if len(jobs):
+        if len(output)==0:
+          self.log_debug('No jobs are running of pending....')
+          self.log_debug('changing SUBMITTED and WAITING to UNKNOWN ....')
+          for (task,status) in self.TASK_STATUS.items():
+            if status in ('RUNNING','SUBMITTED','PENDING','WAITING'):
+              self.TASK_STATUS[task] = 'UNKNOWN'
+              self.log_debug('updated status for %s : %s' % (task,'UNKNOWN'))
+              
+        elif len(jobs):
           self.log_debug('squeue result: \n >>>%s<<' % output,2)
           for l in jobs:
             if len(l)<3:
@@ -329,6 +338,7 @@ class breakit(engine):
               self.TASK_STATUS[task] = status
               self.log_debug('updated status for %s : %s' % (task,status))
 
+          
     # tasks that completed and had the time to save their status
 
     for status in ['OK','NOK']:
@@ -346,13 +356,14 @@ class breakit(engine):
       self.release_lock(lock_file)
       self.log_debug('lock released')
 
-    return self.display_status('o',output)
+    print self.TASK_STATUS  
+    return self.display_status('o',display)
   
   #########################################################################
   # display_status
   #########################################################################
     
-  def display_status(self,msg='',output=True):
+  def display_status(self,msg='',display=True):
     
     self.TASK_STATS = {}
     #print TASK_POSSIBLE_STATES
@@ -364,13 +375,13 @@ class breakit(engine):
 
 
     nb_all = 0
-    if output:
+    if display:
       self.log_info( '')
       self.log_info( '--- Current status at %s --%s------' % (time.ctime(),msg))
     for (status,tasks) in self.TASK_STATS.items():
       nb = len(self.TASK_STATS[status])
       nb_all = nb_all + nb
-      if nb and output:
+      if nb and display:
         # print tasks,status
         # print ",".join(tasks)
         #print RangeSet(",".join(tasks))
@@ -460,7 +471,7 @@ class breakit(engine):
     if self.args.array:
       tasks_to_kill = RangeSet(self.args.array)
     
-    previous_running_tasks = self.check_jobs(take_lock=False,output=self.args.debug)
+    previous_running_tasks = self.check_jobs(take_lock=False,display=self.args.debug)
 
     jobs_to_kill = []
 

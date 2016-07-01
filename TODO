@@ -8,6 +8,8 @@ should not ask anythinh after a gC
 do not overwrite self.job if specified in command line or print a warning and add --force
 
 
+get rid of SUBMITTED and waiting state if no jobs are in the queue
+
 check why check method can still submit jobs
 
 
