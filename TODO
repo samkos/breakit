@@ -1,5 +1,10 @@
 
 
+for --scratch, check before asking if you want to kill
+gC
+breakit --job=job.wait --array=1-50 --scratch
+should not ask anythinh after a gC
+
 do not overwrite self.job if specified in command line or print a warning and add --force
 
 

@@ -276,7 +276,7 @@ class breakit(engine):
   #########################################################################
   # check_jobs update current job status
   #########################################################################
-  def check_jobs(self,take_lock=True):
+  def check_jobs(self,take_lock=True,output=True):
     #
     if take_lock:
       self.log_debug("continuing... taking lock",4)
@@ -298,11 +298,16 @@ class breakit(engine):
     # updating status of tasks already spawned by breakit
     
     additional_check = []
+    task_job_ids = self.TASK_JOB_ID.keys()
     for (task,status) in self.TASK_STATUS.items():
       #print task,status
       if status in ('RUNNING','SUBMITTED','PENDING'):
         self.log_debug('checking on last status of task %s of previous status /%s/' % \
                        (task,status),2)
+        if not(task in  task_job_ids):
+          self.log_info('WARNING!!! %s has no corresponding Job ID! ' % task)
+          print self.TASK_JOB_ID
+          continue
         additional_check.append("%s_%s" % (self.TASK_JOB_ID[task],task))
 
     if len(additional_check):
@@ -341,13 +346,13 @@ class breakit(engine):
       self.release_lock(lock_file)
       self.log_debug('lock released')
 
-    return self.display_status('o')
+    return self.display_status('o',output)
   
   #########################################################################
   # display_status
   #########################################################################
     
-  def display_status(self,msg=''):
+  def display_status(self,msg='',output=True):
     
     self.TASK_STATS = {}
     #print TASK_POSSIBLE_STATES
@@ -357,13 +362,15 @@ class breakit(engine):
     for (task,status) in self.TASK_STATUS.items():
       self.TASK_STATS[status].append(task)
 
+
     nb_all = 0
-    self.log_info( '')
-    self.log_info( '--- Current status at %s --%s------' % (time.ctime(),msg))
+    if output:
+      self.log_info( '')
+      self.log_info( '--- Current status at %s --%s------' % (time.ctime(),msg))
     for (status,tasks) in self.TASK_STATS.items():
       nb = len(self.TASK_STATS[status])
       nb_all = nb_all + nb
-      if nb:
+      if nb and output:
         # print tasks,status
         # print ",".join(tasks)
         #print RangeSet(",".join(tasks))
@@ -453,7 +460,7 @@ class breakit(engine):
     if self.args.array:
       tasks_to_kill = RangeSet(self.args.array)
     
-    previous_running_tasks = self.check_jobs(take_lock=False)
+    previous_running_tasks = self.check_jobs(take_lock=False,output=self.args.debug)
 
     jobs_to_kill = []
 
