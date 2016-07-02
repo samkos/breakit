@@ -437,18 +437,21 @@ class engine:
         self.log_debug ('--> not updating status')
         self.JOB_STATS[status].append(job_id)
       else:
+        job_array_id = job_id.split('_')[0]
         if not(job_id in jobs_to_check):
-            jobs_to_check.append(job_id)
+            jobs_to_check.append(job_array_id)
 
     if len(jobs_to_check)==0:
       self.log_debug('%s' % self.JOB_STATS)
       return
     
-    cmd = ["sacct","-n","-p","-j",".batch,".join(jobs_to_check)+'.batch']
+    cmd = ["sacct","-n","-p","-j",",".join(jobs_to_check)+'.batch']
     self.log_debug('cmd so get new status : %s' % " ".join(cmd))
     try:
       output = subprocess.check_output(cmd)
       sacct_worked = True
+      self.log_debug('sacct results>>\n%s<<' % output)
+      #",".join(map(str,NodeSet('81567_[5-6,45-59]')))
     except:
       if self.args.debug:
         self.error('WARNING [get_current_job_status] subprocess with ' + " ".join(cmd),exception=self.args.debug)
@@ -458,22 +461,25 @@ class engine:
       sacct_worked = False
       self.log_info('[get_current_job_status] sacct could not be used')
     if sacct_worked:
-      print output[:-1]
       for l in output[:-1].split("\n"):
+          task = 'Not yet'
           try:
             self.log_debug('l=%s'%l,2)
-            j=l.split("|")[0].split(".")[0]
-            status=l.split("|")[-3]
-            print status
+            sacct_fields = l.split("|")
+            tasks=NodeSet(sacct_fields[0])
+            status=sacct_fields[5].split(' ')[0]
             if status in JOB_POSSIBLE_STATES:
-              self.log_debug('status=%s j=%s' % (status,j),1)
-              if status[-1]=='+':
-                status  = status[:-1]
-              self.JOB_STATUS[j] = status
-              self.JOB_STATS[status].append(job_id)
+              for task in tasks:
+                self.log_debug('status=%s task=%s' % (status,task),1)
+                if status[-1]=='+':
+                  status  = status[:-1]
+                self.JOB_STATUS[task] = status
+                self.JOB_STATS[status].append(task)
+            else:
+                log_info('unknown status got for tasks %s' % ','.join(tasks))
           except:
             if self.args.debug:
-              self.dump_exception('[get_current_job_status] parse job_status with j=%s' % j +"\n job status : "+l)
+              self.dump_exception('[get_current_job_status] parse job_status with task=%s' % task +"\n job status : "+l)
             else:
               status_error = True
             pass

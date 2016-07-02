@@ -286,6 +286,8 @@ class breakit(engine):
       self.load()
       self.load_task_stats()
 
+
+
     # gathering information on tasks just submitted butn ot scheduled
     for status in ['SUBMITTED']:
       for f in  glob.glob('%s/%s;*' % (self.SAVE_DIR,status)):
@@ -310,6 +312,8 @@ class breakit(engine):
             print self.TASK_JOB_ID
           continue
         additional_check.append("%s_%s" % (self.TASK_JOB_ID[task],task))
+
+    self.get_current_jobs_status()
 
     if len(additional_check):
         cmd = 'squeue -h -l -o "%.20i %.20T" -r ' + '-u %s | grep _'  % (getpass.getuser())
