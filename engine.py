@@ -475,6 +475,11 @@ class engine:
                   status  = status[:-1]
                 self.JOB_STATUS[task] = status
                 self.JOB_STATS[status].append(task)
+                task_id = task.split('_')[1].split('.')[0]
+                if task_id in self.TASK_STATUS.keys():
+                    if self.TASK_STATUS[task_id] in ['OK','NOK']:
+                        continue
+                self.TASK_STATUS[task_id] = status
             else:
                 log_info('unknown status got for tasks %s' % ','.join(tasks))
           except:

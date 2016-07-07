@@ -49,7 +49,7 @@ from ClusterShell.NodeSet import *
 
 ERROR = -1
 
-TASK_POSSIBLE_STATES = JOB_POSSIBLE_STATES + ('SUBMITTED','OK','NOK','WAITING','KILLED','UNKNOWN')
+TASK_POSSIBLE_STATES = JOB_POSSIBLE_STATES + ('SUBMITTED','OK','NOK','WAITING','KILLED','UNKNOWN','ABORTED')
 
 
 
@@ -299,6 +299,8 @@ class breakit(engine):
 
     # updating status of tasks already spawned by breakit
     
+    self.get_current_jobs_status()
+
     additional_check = []
     task_job_ids = self.TASK_JOB_ID.keys()
     for (task,status) in self.TASK_STATUS.items():
@@ -313,36 +315,25 @@ class breakit(engine):
           continue
         additional_check.append("%s_%s" % (self.TASK_JOB_ID[task],task))
 
-    self.get_current_jobs_status()
 
     if len(additional_check):
-        cmd = 'squeue -h -l -o "%.20i %.20T" -r ' + '-u %s | grep _'  % (getpass.getuser())
-        output =  self.system(cmd)
-        jobs = output[:-1].split("\n")
-        if len(output)==0:
-          self.log_debug('No jobs are running of pending....')
+        if self.args.debug:
+          #print self.JOB_STATS
+          print self.JOB_STATS['RUNNING'],self.JOB_STATS['PENDING']
+          #print self.TASK_STATUS
+        for (s,j) in self.JOB_STATS.items():
+          print 'status : ',s,len(j)
+        print (len(self.JOB_STATS['RUNNING'])+len(self.JOB_STATS['PENDING']))
+        if (len(self.JOB_STATS['RUNNING'])+len(self.JOB_STATS['PENDING']))==0:
+          self.log_info('No jobs are running or pending....')
           self.log_debug('changing SUBMITTED and WAITING to UNKNOWN ....')
           for (task,status) in self.TASK_STATUS.items():
             if status in ('RUNNING','SUBMITTED','PENDING','WAITING'):
-              self.TASK_STATUS[task] = 'UNKNOWN'
+              self.TASK_STATUS[task] = 'ABORTED'
               self.log_debug('updated status for %s : %s' % (task,'UNKNOWN'))
-              
-        elif len(jobs):
-          self.log_debug('squeue result: \n >>>%s<<' % output,2)
-          for l in jobs:
-            if len(l)<3:
-              continue
-            self.log_debug('line scanned: \n >>>%s<<' % l,2)
-            l = clean_line(l)
-            (id,status) = l.split(" ")
-            #id = '%s' % id
-            (job,task) = id.split("_")
-            # print id, additional_check, (id in additional_check)
-            if (id in additional_check):
-              self.TASK_STATUS[task] = status
-              self.log_debug('updated status for %s : %s' % (task,status))
-
           
+
+
     # tasks that completed and had the time to save their status
 
     for status in ['OK','NOK']:
@@ -360,7 +351,7 @@ class breakit(engine):
       self.release_lock(lock_file)
       self.log_debug('lock released')
 
-    print self.TASK_STATUS  
+    #print self.TASK_STATUS  
     return self.display_status('o',display)
   
   #########################################################################
