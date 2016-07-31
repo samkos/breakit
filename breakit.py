@@ -101,7 +101,6 @@ class breakit(engine):
     self.parser.add_argument("-c","--chunk", type=int , help="maximum number of jobs to queue simultaneously", default=8)
     self.parser.add_argument("-j","--job", type=str , help="Slurm Job script")
     
-    self.parser.add_argument("--go-on", action="store_true", help=argparse.SUPPRESS)
     self.parser.add_argument("--finalize", action="store_true", help=argparse.SUPPRESS)
     self.parser.add_argument("-s","--status", action="store_true", help='checking status of jobs')
     self.parser.add_argument("--exit-code", type=int , default=0,  help=argparse.SUPPRESS)
@@ -175,9 +174,11 @@ class breakit(engine):
       
     if self.args.taskid:
       print self.TASK_STATUS
-      if self.TASK_STATUS['%s' % self.args.taskid]=='KILLED':
-        self.log_info('task %s was killed by the user. Giving up this job')
-        sys.exit(1)
+      k = '%s' % self.args.taskid
+      if k in self.TASK_STATUS.keys():
+        if self.TASK_STATUS[k]=='KILLED':
+          self.log_info('task %s was killed by the user. Giving up this job')
+          sys.exit(1)
 
   #########################################################################
   # save_workspace

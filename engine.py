@@ -125,6 +125,7 @@ class engine:
     self.parser.add_argument("--restart", action="store_true", help=argparse.SUPPRESS)
     self.parser.add_argument("--create-template", action="store_true", help='create template')
 
+    self.parser.add_argument("--go-on", action="store_true", help=argparse.SUPPRESS)
     self.parser.add_argument("--log-dir", type=str, help=argparse.SUPPRESS)
     self.parser.add_argument("--mail", type=str, help=argparse.SUPPRESS)
     self.parser.add_argument("--fake", action="store_true", help=argparse.SUPPRESS)
@@ -270,10 +271,11 @@ class engine:
       if not(os.path.exists(d)):
         os.makedirs(d)
         self.log_debug("creating directory "+d,1)
-    
-    for f in glob.glob("*.py"):
-      self.log_debug("copying file %s into SAVE directory " % f,1)
-      os.system("cp ./%s  %s" % (f,self.SAVE_DIR))
+
+    if not(self.args.go_on):
+      for f in glob.glob("*.py"):
+        self.log_debug("copying file %s into SAVE directory " % f,1)
+        os.system("cp ./%s  %s" % (f,self.SAVE_DIR))
 
     # for f in self.FILES_TO_COPY:
     #   os.system("cp %s/%s %s/" % (self.INITIAL_DATA_DIR,f,self.JOB_DIR_0))
@@ -433,7 +435,7 @@ class engine:
     for job_id in self.JOB_STATUS.keys():
       status = self.JOB_STATUS[job_id]
       self.log_debug('status : /%s/ for job %s ) ' % (status,job_id))
-      if status in ("CANCELLED","COMPLETED"):
+      if status in ("CANCELLED","COMPLETED","FAILED","TIMEOUT"):
         self.log_debug ('--> not updating status')
         self.JOB_STATS[status].append(job_id)
       else:
@@ -634,12 +636,12 @@ class engine:
   # os.system wrapped to enable Trace if needed
   #########################################################################
 
-  def system(self,cmd,comment="No comment",fake=False,verbosity=1):
+  def system(self,cmd,comment="No comment",fake=False,verbosity=1,force=False):
 
     self.log_debug("\tcurrently executing /%s/ :\n\t\t%s" % (comment,cmd),verbosity)
 
     output='FAKE EXECUTION'
-    if not(fake) and not(self.args.fake):
+    if force or (not(fake) and not(self.args.fake)):
       #os.system(cmd)
       #subprocess.call(cmd,shell=True,stderr=subprocess.STDOUT)
       proc = subprocess.Popen(cmd, shell=True, bufsize=1, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)

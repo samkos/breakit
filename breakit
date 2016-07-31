@@ -6,5 +6,5 @@ then
    python ./my_breakit.py $*
 else
    #echo python $KTF_PATH/run_tests.py $*
-   python $KTF_PATH/breakit.py $*
+   python $BREAKIT_PATH/breakit.py $*
 fi
