@@ -737,8 +737,8 @@ class engine:
 
     # sendmail only works from a node on shaheen 2 via an ssh connection to cdl via gateway...
 
-    mail_file = os.path.abspath("./mail.txt")
-
+    mail_file = os.path.abspath("./mail.txt_%s" % os.getpid())
+ 
     f = open(mail_file,'w')
     f.write(msg)
     f.close()
@@ -750,6 +750,7 @@ class engine:
     self.log_debug("self.args.mail cmd : "+cmd,2)
     os.system(cmd)
 
+    os.unlink(mail_file)
 
 
   #########################################################################
