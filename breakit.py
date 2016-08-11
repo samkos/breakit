@@ -238,7 +238,7 @@ class breakit(engine):
     status = 'OK'
     if self.args.exit_code:
       status = 'NOK'
-    filename = '%s/%s;%s;%s;%s' % (self.SAVE_DIR,status,self.args.taskid,\
+    filename = '%s/%s;%s;%s;%s' % (self.JOB_DIR,status,self.args.taskid,\
                                    self.args.jobid,self.args.exit_code)
     self.log_debug('touching stub file %s' % filename,1)
     f = open(filename,'w')
@@ -291,7 +291,7 @@ class breakit(engine):
 
     # gathering information on tasks just submitted butn ot scheduled
     for status in ['SUBMITTED']:
-      for f in  glob.glob('%s/%s;*' % (self.SAVE_DIR,status)):
+      for f in  glob.glob('%s/%s;*' % (self.JOB_DIR,status)):
         l=(status_saved,task,job,exit_code) = os.path.basename(f).split(';')
         self.TASK_STATUS [task] = status_saved
         self.TASK_JOB_ID [task] = job
@@ -338,7 +338,7 @@ class breakit(engine):
     # tasks that completed and had the time to save their status
 
     for status in ['OK','NOK']:
-      for f in  glob.glob('%s/%s;*' % (self.SAVE_DIR,status)):
+      for f in  glob.glob('%s/%s;*' % (self.JOB_DIR,status)):
         l=(status_saved,task,job,exit_code) = os.path.basename(f).split(';')
         self.TASK_STATUS [task] = status_saved
         self.TASK_JOB_ID [task] = job
@@ -444,7 +444,7 @@ class breakit(engine):
   # cleaning environment
   #########################################################################
   def clean(self,force=False):
-    for d in [self.JOB_DIR,self.SAVE_DIR]:
+    for d in [self.SAVE_DIR,self.JOB_DIR]:
       if os.path.exists(d):
         self.log_info("deleting directory %s..." % d)
         shutil.rmtree(d)        
@@ -575,7 +575,7 @@ class breakit(engine):
     for i in map(str,tasks):
       if not(self.TASK_STATUS[i] == 'KILLED'):
         status = 'SUBMITTED'
-        filename = '%s/%s;%s;%s;%s' % (self.SAVE_DIR,status,i,job_id,0)
+        filename = '%s/%s;%s;%s;%s' % (self.JOB_DIR,status,i,job_id,0)
         open(filename,"w").close()
         self.TASK_STATUS[i] = 'SUBMITTED'
       

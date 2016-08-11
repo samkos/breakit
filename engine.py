@@ -31,7 +31,7 @@ LOCK_EX = fcntl.LOCK_EX
 LOCK_SH = fcntl.LOCK_SH
 LOCK_NB = fcntl.LOCK_NB
 
-ENGINE_VERSION = '0.16'
+ENGINE_VERSION = '0.17'
 
 class LockException(Exception):
     # Error codes:
@@ -95,9 +95,13 @@ class engine:
     self.JOB_WORKDIR = {}
     self.JOB_STATUS = {}
     self.timing_results = {}
+    self.SYSTEM_OUTPUTS = {}
     
     self.LOCK_FILE = "%s/lock" % self.LOG_DIR
     self.STATS_ID_FILE = "%s/stats_ids.pickle" % self.LOG_DIR
+
+    self.already_saved = False
+    self.already_loaded = False
 
     self.env_init()
     
@@ -129,6 +133,8 @@ class engine:
     self.parser.add_argument("--log-dir", type=str, help=argparse.SUPPRESS)
     self.parser.add_argument("--mail", type=str, help=argparse.SUPPRESS)
     self.parser.add_argument("--fake", action="store_true", help=argparse.SUPPRESS)
+    self.parser.add_argument("--save", type=str, help=argparse.SUPPRESS)
+    self.parser.add_argument("--load", type=str,  help=argparse.SUPPRESS)    
     self.parser.add_argument("--dry", action="store_true", help=argparse.SUPPRESS)
     self.parser.add_argument("--pbs", action="store_true", help=argparse.SUPPRESS)
     self.parser.add_argument("-x","--exclude-nodes", type=str , help=argparse.SUPPRESS)
@@ -396,6 +402,16 @@ class engine:
     if os.path.exists(workspace_file):
       os.rename(workspace_file,workspace_file+".old")
     os.rename(workspace_file+".new",workspace_file)
+
+    if self.args.save:
+        trace_file = '%s/traces.%s' % (self.LOG_DIR,self.args.save)
+        f = open(trace_file+".new", "wb" )
+        pickle.dump(self.SYSTEM_OUTPUTS,f)
+        f.close()
+        if os.path.exists(trace_file):
+            os.rename(trace_file,trace_file+".old")
+        os.rename(trace_file+".new",trace_file)
+        
     
     self.release_lock(lock_file)
 
@@ -407,6 +423,15 @@ class engine:
   def load(self):
 
     try:
+      if self.args.load:
+          saved_workfile = '%s/%s.%s' % (self.LOG_DIR,os.path.basename(self.WORKSPACE_FILE),self.args.load)
+          if os.path.exists(saved_workfile):
+              cmd = 'cp %s %s ' % (saved_workfile,self.WORKSPACE_FILE)
+              self.system(cmd,trace=False)
+          else:
+              self.error('[load]  problem encountered while loading saved workfile for  trace=/%s/' % self.args.load,
+                         exit=True, exception=True)  #self.args.debug)
+
       #print "loading variables from file "+workspace_file
       if os.path.exists(self.WORKSPACE_FILE):
           f = open( self.WORKSPACE_FILE, "rb" )
@@ -416,6 +441,25 @@ class engine:
           self.JOB = pickle.load(f)
           self.timing_results = pickle.load(f)
           f.close()
+          if self.args.save:
+            self.SYSTEM_OUTPUTS[self.args.save] = []
+            if not(self.args.go_on) and not(self.already_saved):
+                cmd = 'cp %s %s/%s.%s' % (self.WORKSPACE_FILE,self.LOG_DIR,os.path.basename(self.WORKSPACE_FILE),self.args.save)
+                self.system(cmd,cmd,trace=False)
+                self.already_saved = True
+
+          if self.args.load:
+            if not(self.already_loaded):  
+              trace_file = '%s/traces.%s' % (self.LOG_DIR,self.args.load)
+              if os.path.exists(trace_file):
+                 f = open(trace_file,'rb')
+                 self.SYSTEM_OUTPUTS = pickle.load(f)
+                 self.already_loaded = True
+                 f.close()
+              else:
+                self.error('[load]  problem encountered while loading tracing data for trace=/%s/' % self.args.load,
+                          exit=True, exception=True)  #self.args.debug)
+
     except:
         self.error('[load]  problem encountered while loading current workspace\n---->  rerun with -d to have more information',
                           exit=True, exception=True)  #self.args.debug)
@@ -448,9 +492,10 @@ class engine:
       return
     
     cmd = ["sacct","-n","-p","-j",",".join(jobs_to_check)+'.batch']
+    cmd = " ".join(cmd)
     self.log_debug('cmd so get new status : %s' % " ".join(cmd))
     try:
-      output = subprocess.check_output(cmd)
+      output = self.system(cmd)
       sacct_worked = True
       self.log_debug('sacct results>>\n%s<<' % output)
       #",".join(map(str,NodeSet('81567_[5-6,45-59]')))
@@ -636,9 +681,16 @@ class engine:
   # os.system wrapped to enable Trace if needed
   #########################################################################
 
-  def system(self,cmd,comment="No comment",fake=False,verbosity=1,force=False):
+  def system(self,cmd,comment="No comment",fake=False,verbosity=1,force=False,trace=True):
 
+    self.log_info('in system cmd=/%s/ ' % cmd,2)
     self.log_debug("\tcurrently executing /%s/ :\n\t\t%s" % (comment,cmd),verbosity)
+
+    if trace and self.args.load:
+        self.log_info('reading from trace file / output = /%s/' % len(self.SYSTEM_OUTPUTS[self.args.load]),2)
+        output = self.SYSTEM_OUTPUTS[self.args.load].pop(0)
+        self.log_info('reading from trace file / output = /%s/' % output,3)
+        return output
 
     output='FAKE EXECUTION'
     if force or (not(fake) and not(self.args.fake)):
@@ -654,6 +706,10 @@ class engine:
           output += line
       if len(output):
         self.log_debug("output=+"+output,verbosity+1)
+      if trace and self.args.save:
+          self.SYSTEM_OUTPUTS[self.args.save].append(output)
+          self.log_info('writing to trace file / output = /%s/' % output,3)
+
     return output
 
 
@@ -668,8 +724,8 @@ class engine:
     
     # sendmail only works from a node on shaheen 2 via an ssh connection to cdl via gateway...
 
-    if not(self.args.mail_TO):
-      self.args.mail_TO = getpass.getuser()
+    if not(self.args.mail):
+      self.args.mail = getpass.getuser()
 
   def send_mail(self,title,msg,to=None):
 
@@ -688,7 +744,7 @@ class engine:
     f.close()
 
     if not(to):
-        to = self.args.mail_TO
+        to = self.args.mail
         
     cmd = (self.MAIL_COMMAND+"2> /dev/null") % (title, to, mail_file)
     self.log_debug("self.args.mail cmd : "+cmd,2)

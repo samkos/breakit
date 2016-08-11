@@ -67,10 +67,10 @@ def get_machine():
         MAIL_COMMAND = """ssh cdl2.hpc.kaust.edu.sa 'mail -s \\"%s\\" %s < %s' """
         DEFAULT_QUEUE="workq"
         SUBMIT_COMMAND = 'sbatch'
-    elif (machine=="kw14425"):
+    elif (machine[:7]=="kw14425"):
         machine = "sam"
         CORE_PER_NODE_REGARDING_QUEUE["debug"] = 4
-        MAIL_COMMAND = ""
+        MAIL_COMMAND = """mail -s "%s" %s < %s """
         #SCHED_TYPE = "pbs"
         DEFAULT_QUEUE="debug"
     else:
