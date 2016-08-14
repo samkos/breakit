@@ -64,7 +64,7 @@ def get_machine():
         machine = "shaheen"
         tmp_directory = "/scratch/tmp/"
         CORE_PER_NODE_REGARDING_QUEUE["highmem"] = 4
-        MAIL_COMMAND = """ssh cdl2.hpc.kaust.edu.sa 'mail -s \\"%s\\" %s < %s' """
+        MAIL_COMMAND = """ssh cdl2.hpc.kaust.edu.sa 'mail -s "%s" %s < %s' """
         DEFAULT_QUEUE="workq"
         SUBMIT_COMMAND = 'sbatch'
     elif (machine[:7]=="kw14425"):
