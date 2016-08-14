@@ -65,6 +65,8 @@ class engine:
     # saving scheduling option in the object
     
     self.MAIL_COMMAND = MAIL_COMMAND
+    self.MAIL_SUBJECT_PREFIX = ""
+    self.MAIL_CURRENT_MESSAGE = ""
     self.SUBMIT_COMMAND = SUBMIT_COMMAND
     self.SCHED_TYPE = SCHED_TYPE
     self.DEFAULT_QUEUE = DEFAULT_QUEUE
@@ -119,6 +121,7 @@ class engine:
   def initialize_parser(self):
     self.parser.add_argument("-i","--info",  action="count", default=0, help=argparse.SUPPRESS)
     self.parser.add_argument("-d","--debug", action="count", default=0, help=argparse.SUPPRESS)
+    self.parser.add_argument("-m","--mail-verbosity", action="count", default=0, help=argparse.SUPPRESS)
 
     # self.parser.add_argument("--kill", action="store_true", help="Killing all processes")
     # self.parser.add_argument("--scratch", action="store_true", help="Restarting the whole process from scratch cleaning everything")
@@ -127,6 +130,7 @@ class engine:
     self.parser.add_argument("--kill", action="store_true", help=argparse.SUPPRESS)
     self.parser.add_argument("--scratch", action="store_true", help=argparse.SUPPRESS)
     self.parser.add_argument("--restart", action="store_true", help=argparse.SUPPRESS)
+    self.parser.add_argument("--nocleaning", action="store_true", default=False, help=argparse.SUPPRESS)
     self.parser.add_argument("--create-template", action="store_true", help='create template')
 
     self.parser.add_argument("--go-on", action="store_true", help=argparse.SUPPRESS)
@@ -239,6 +243,7 @@ class engine:
 
   def set_log_prefix(self,prefix):
       self.LOG_PREFIX = prefix
+
     
   #########################################################################
   # initialize_scheduler
@@ -727,10 +732,19 @@ class engine:
     if not(self.args.mail):
       self.args.mail = getpass.getuser()
 
-  def send_mail(self,title,msg,to=None):
+  def set_mail_subject_prefix(self,prefix):
+      self.MAIL_SUBJECT_PREFIX = prefix
+
+
+  def send_mail(self,subject,msg,level=0,to=None):
 
     if not(self.args.mail):
       return False
+  
+    if level>self.args.mail_verbosity:
+        self.log_info('%s not sent because level=%s > %s' % (msg,level,self.args.mail_verbosity))
+        return
+
 
     if not(self.MAIL_COMMAND):
       self.error("No mail command available on this machine")
@@ -740,18 +754,28 @@ class engine:
     mail_file = os.path.abspath("./mail.txt_%s" % os.getpid())
  
     f = open(mail_file,'w')
-    f.write(msg)
+    s = self.MAIL_CURRENT_MESSAGE + "\n" + msg
+    for m in s.split("\n"):
+        f.write(m+"\n")
     f.close()
-
+    self.MAIL_CURRENT_MESSAGE = ""
+    
     if not(to):
         to = self.args.mail
         
-    cmd = (self.MAIL_COMMAND+"2> /dev/null") % (title, to, mail_file)
+    cmd = (self.MAIL_COMMAND+"2> /dev/null") % (self.MAIL_SUBJECT_PREFIX+subject, to, mail_file)
     self.log_debug("self.args.mail cmd : "+cmd,2)
     os.system(cmd)
 
-    os.unlink(mail_file)
+    if not(self.args.nocleaning):
+        os.unlink(mail_file)
 
+  def append_mail(self,msg,level=0):
+      
+    if not(self.args.mail) or level>self.args.mail_verbosity:
+      return False
+
+    self.MAIL_CURRENT_MESSAGE = self.MAIL_CURRENT_MESSAGE + "\n" + msg
 
   #########################################################################
   # create template (matrix and job)
