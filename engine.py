@@ -31,7 +31,7 @@ LOCK_EX = fcntl.LOCK_EX
 LOCK_SH = fcntl.LOCK_SH
 LOCK_NB = fcntl.LOCK_NB
 
-ENGINE_VERSION = '0.17'
+ENGINE_VERSION = '0.18'
 
 class LockException(Exception):
     # Error codes:
@@ -736,7 +736,7 @@ class engine:
       self.MAIL_SUBJECT_PREFIX = prefix
 
 
-  def send_mail(self,subject,msg,level=0,to=None):
+  def send_mail(self,msg,level=0,subject='',to=None):
 
     if not(self.args.mail):
       return False
