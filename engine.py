@@ -276,7 +276,7 @@ class engine:
 
   def env_init(self):
 
-    self.log_debug('initialize environment ',1)
+    self.log_debug('initialize environment ',4)
 
     for d in [self.SAVE_DIR,self.LOG_DIR]:
       if not(os.path.exists(d)):
@@ -291,7 +291,7 @@ class engine:
     # for f in self.FILES_TO_COPY:
     #   os.system("cp %s/%s %s/" % (self.INITIAL_DATA_DIR,f,self.JOB_DIR_0))
 
-    self.log_info('environment initialized successfully',1)
+    self.log_info('environment initialized successfully',4)
 
 
   #########################################################################
@@ -742,7 +742,7 @@ class engine:
       return False
   
     if level>self.args.mail_verbosity:
-        self.log_info('%s not sent because level=%s > %s' % (msg,level,self.args.mail_verbosity))
+        self.log_info('%s not sent because level=%s > %s' % (msg,level,self.args.mail_verbosity),4)
         return
 
 
