@@ -736,7 +736,7 @@ class engine:
       self.MAIL_SUBJECT_PREFIX = prefix
 
 
-  def send_mail(self,msg,level=0,subject='',to=None):
+  def send_mail(self,msg='',level=0,subject='',to=None):
 
     if not(self.args.mail):
       return False
@@ -751,7 +751,7 @@ class engine:
 
     # sendmail only works from a node on shaheen 2 via an ssh connection to cdl via gateway...
 
-    mail_file = os.path.abspath("./mail.txt_%s" % os.getpid())
+    mail_file = os.path.abspath("./mail.txt_%s_%s" % (os.getpid(),int(time.time())))
  
     f = open(mail_file,'w')
     s = self.MAIL_CURRENT_MESSAGE + "\n" + msg
@@ -767,8 +767,11 @@ class engine:
     self.log_debug("self.args.mail cmd : "+cmd,2)
     os.system(cmd)
 
+    time.sleep(3)
+    
     if not(self.args.nocleaning):
-        os.unlink(mail_file)
+        pass
+        #os.unlink(mail_file)
 
   def append_mail(self,msg,level=0):
       
@@ -777,6 +780,12 @@ class engine:
 
     self.MAIL_CURRENT_MESSAGE = self.MAIL_CURRENT_MESSAGE + "\n" + msg
 
+
+  def flush_mail(self,msg=''):
+
+    if len(self.MAIL_CURRENT_MESSAGE):
+        self.send_mail(msg)
+        
   #########################################################################
   # create template (matrix and job)
   #########################################################################
