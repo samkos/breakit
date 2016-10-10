@@ -59,7 +59,7 @@ class breakit(engine):
 
     
     self.APP_NAME  = app_name
-    self.VERSION = "0.3"
+    self.VERSION = "0.4"
     self.ENGINE_VERSION_REQUIRED = engine_version
 
     engine.__init__(self,self.APP_NAME,self.VERSION,engine_version_required=self.ENGINE_VERSION_REQUIRED)
