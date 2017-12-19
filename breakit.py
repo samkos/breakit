@@ -276,12 +276,12 @@ class breakit(engine):
     cmd = [self.SCHED_Q,"-l","-u",my_username]
 
     output = subprocess.check_output(cmd)
-    for l in output.split("\n"):
-      self.log_debug(l,2)
-      if l.find(my_username) > -1:
-        l = re.sub(r'^\s+', "",l)
-        l = re.sub(r'\s+', " ",l)
-        f = l.split(" ")
+    for c in output.split("\n"):
+      self.log_debug(c,2)
+      if c.find(my_username) > -1:
+        c = re.sub(r'^\s+', "",c)
+        c = re.sub(r'\s+', " ",c)
+        f = c.split(" ")
         if self.PBS:
           fj = f[0].split(".")
         else:
