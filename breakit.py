@@ -375,7 +375,7 @@ class breakit(engine):
     if not self.DRY_RUN:
       try:
         output = subprocess.check_output(cmd)
-      except:
+      except: # NOQA
         self.error_report("Something went wrong during the submission of the job",\
                           exit=True,exception=self.DEBUG)
 
@@ -538,7 +538,7 @@ class breakit(engine):
     # chekcking python version
     try:
       subprocess.check_output(["ls"])
-    except:
+    except: # NOQA
       print ("ERROR : Please use a more recent version of Python > 2.7.4")
       sys.exit(1)
 
