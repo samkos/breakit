@@ -9,4 +9,5 @@ test:
   script:
   #- python setup.py test
   - pip install tox flake8  ClusterShell # you can also use tox
-  - tox -e py27,flake8
+  #- tox -e py27,
+  - flake8
