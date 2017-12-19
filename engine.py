@@ -14,6 +14,7 @@ import fcntl
 import getpass
 import pickle
 import argparse
+import pprint
 from ClusterShell.NodeSet import *
 
 JOB_POSSIBLE_STATES = ('PENDING','RUNNING','SUSPENDED','COMPLETED',\
@@ -31,7 +32,10 @@ LOCK_EX = fcntl.LOCK_EX
 LOCK_SH = fcntl.LOCK_SH
 LOCK_NB = fcntl.LOCK_NB
 
-ENGINE_VERSION = '0.18'
+ENGINE_VERSION = '0.21'
+
+ERROR_FILE_DOES_NOT_EXISTS = -33
+ERROR_PATTERN_NOT_FOUND = -34
 
 class LockException(Exception):
     # Error codes:
@@ -81,7 +85,7 @@ class engine:
     self.check_engine_version(engine_version_required)
 
     # parse command line to eventually overload some default values
-    self.parser = argparse.ArgumentParser()
+    self.parser = argparse.ArgumentParser(conflict_handler='resolve')
     self.initialize_parser()
     self.args = self.parser.parse_args()
     
@@ -145,6 +149,9 @@ class engine:
     self.parser.add_argument("-r","--reservation", type=str , help='SLURM reservation')
     self.parser.add_argument("-p","--partition", type=str , help='SLURM partition')
         
+    self.parser.add_argument("-y","--yes",  action="store_true", help=argparse.SUPPRESS)
+
+
 
   #########################################################################
   # main router
@@ -164,7 +171,10 @@ class engine:
         self.log_info("cleaning environment...")
         self.clean()
 
-                                    
+
+    if self.args.mail_verbosity>0 and not(self.args.mail):
+        self.args.mail = getpass.getuser()
+        
     if self.args.kill:
         self.kill_jobs()
         sys.exit(0)
@@ -288,8 +298,11 @@ class engine:
         self.log_debug("copying file %s into SAVE directory " % f,1)
         os.system("cp ./%s  %s" % (f,self.SAVE_DIR))
 
-    # for f in self.FILES_TO_COPY:
-    #   os.system("cp %s/%s %s/" % (self.INITIAL_DATA_DIR,f,self.JOB_DIR_0))
+
+      if not(hasattr(self,'FILES_TO_COPY')):
+        self.FILES_TO_COPY = []
+      for f in self.FILES_TO_COPY:
+        os.system("cp %s %s/" % (f,self.SAVE_DIR))
 
     self.log_info('environment initialized successfully',4)
 
@@ -580,21 +593,24 @@ class engine:
   # welcome message
   #########################################################################
 
-  def welcome_message(self):
+  def welcome_message(self,print_header=True,print_cmd=True):
       """ welcome message"""
-      
-      print
-      print("          ########################################")
-      print("          #                                      #")
-      print("          #   Welcome to %11s version %3s!#" % (self.APPLICATION_NAME, self.APPLICATION_VERSION))
-      print("          #    (using ENGINE Framework %3s)     #" % self.ENGINE_VERSION)
-      print("          #                                      #")
-      print("          ########################################")
-      print("       ")
 
+      if print_header:
+        print
+        print("          ########################################")
+        print("          #                                      #")
+        print("          #   Welcome to %11s version %3s!#" % (self.APPLICATION_NAME, self.APPLICATION_VERSION))
+        print("          #    (using ENGINE Framework %3s)     #" % self.ENGINE_VERSION)
+        print("          #                                      #")
+        print("          ########################################")
+        print("       ")
 
-      print   ("\trunning on %s (%s) " %(MY_MACHINE_FULL_NAME,MY_MACHINE))
-      print   ("\t\tpython " + " ".join(sys.argv))
+      if print_cmd:
+        print   ("\trunning on %s (%s) " %(MY_MACHINE_FULL_NAME,MY_MACHINE))
+        print   ("\t\tpython " + " ".join(sys.argv))
+        print
+        
       self.MY_MACHINE = MY_MACHINE
 
   #########################################################################
@@ -809,7 +825,280 @@ class engine:
     sys.exit(0)
       
 
+  #########################################################################
+  # tail log file
+  #########################################################################
+
+  def tail_log_file(self,filename=None,keep_probing=False,nb_lines_tailed=20,message=True,no_timestamp=False,stop_tailing=False):
+
+    try:
+      if filename==None:
+          filename = self.log_file_name
+        
+      if not os.path.isfile(filename):
+          self.error_report("no logfile %s yet..." % filename,exit=True)
+
+      if message:
+          print 
+          print "="*80
+          print('Currently Tailing ... \n %s' % filename)
+          print('\t\tHit CTRL-C to exit...' * 2)
+          print('='*80)
+          print('...')
+          
+      fic = open(filename, "r")
+      lines = fic.readlines()
+      for line in lines[-nb_lines_tailed:]:
+          if no_timestamp:
+              line = re.sub('^.*\[','[',line[:-1])
+          print line
+      #if str.find(lines[-1], "goodbye") >=0:
+      #    good_bye_reached = True
+      while True:
+          where = fic.tell()
+          line = fic.readline()
+          if not line:
+              time.sleep(10)
+              fic.seek(where)
+          else:
+              if no_timestamp:
+                  line = re.sub('^.*\[','[',line)
+              print line, # already has newline
+              sys.stdout.flush()
+              if type(stop_tailing)==type("chaine"):
+                  if line.find(stop_tailing)>-1:
+                      keep_probing = False
+                      return True
+              if type(stop_tailing)==type(["string1","string2"]):
+                  for pattern in stop_tailing:
+                      if line.find(pattern)>-1:
+                          keep_probing = False
+                          return True
+          if not(keep_probing):
+              break
+    except KeyboardInterrupt:
+        print "\n bye bye come back anytime!   To resume this monitoring type :"
+        print   ("\t\tpython %s --log" % sys.argv[0])
+        print 
+        keep_probing = False
+        return False
+    
+  #########################################################################
+  # look for a pattern in a set of files
+  #########################################################################
+
+  def check_for_pattern(self,pattern,file_mask=None,files=None,return_all=False,col=None):
+
+      error = 0
+      
+      if not(file_mask) and not(files):
+          self.error("in check_for_pattern('%s') on must add at least file_mask or files parameter" %\
+                     pattern)
+      
+      filter_success = 0
+      pattern_found = {}
+      if file_mask:
+          files = glob.glob(file_mask)
+      else:
+          files_to_scan = files
+          files = []
+          for f in files_to_scan:
+              if os.path.isfile(f):
+                  files = files + [f]
+                  
+      self.log_debug('files : [%s] ' % ",".join(files),2)
+
+      if len(files)==0:
+          error = ERROR_FILE_DOES_NOT_EXISTS
+      
+      for f in files:
+          (p, return_code) = self.greps(pattern,f,col,return_all=True)
+          if p:
+              pattern_found[f] = [p,len(p)]
+              filter_success = filter_success+len(p)
+          else:
+              pattern_found[f] = [None,0]
+
+      if error<0:
+          filter_success = error
+          
+      if return_all:
+           return (filter_success,files,pattern_found,error)
+      else:
+           return filter_success
+
+
+  #########################################################################
+  # look for a pattern in a file
+  #########################################################################
+
+  def greps(self,motif, file_name, col = None, nb_lines = -1, return_all=False, exclude_patterns=[]):
+      """
+       Fonction qui retourne toute ligne contenant un motif dans un fichier
+       et renvoie le contenu d'une colonne de cette ligne
+       
+       fic             --> Nom du fichier
+       motif         --> Motif a chercher
+       col             --> La liste des Numeros de colonne a extraire
+       endroit     --> Un objet de type situation
+       nb_lines  --> nb_lines max a renvoyer
+       Renvoie la colonne col et un indicateur indiquant si le motif a y trouver
+
+       """
+      #
+      self.log_debug("greps called for searching %s in %s " % (motif, file_name),2)
+
+      
+      trouve = -1
+      rep = []
+      motif0 = str.replace(motif,    '\\MOT',    '[^\s]*')
+      motif0 = str.replace(motif0,    '\\SPC',    '\s*')
+
+      # col can be    Nothing,         one figure,     or    a list of figures
+      type_matching = "Columns"
+      if col == None:
+          type_matching = "Grep"
+      if type(col) == type(2):
+          col = [col] 
+      if type(col) == type("chaine"):
+          type_matching = "Regexp"
+          masque0 = str.replace(col,    '\\MOT',    '[^\s]*')
+          masque0 = str.replace(masque0,    '\\SPC',    '\s*')
+
+      file_name_full_path = MY_MACHINE_FULL_NAME+":"+os.getcwd()
+
+      if os.path.isfile(file_name)==False:
+          if col == None:
+              self.log_debug("file '%s' read \n\t from path '%s' \
+                                                  \n\t searched for motif '%s' does not exist!!!!"\
+                             %(file_name, file_name_full_path, motif))
+          else:
+              self.log_debug("file '%s' read \n\t from path '%s' \
+                                                  \n\t searched for motif '%s' to get column # [%s] \
+                                                  \n\t  file does not exist!!!"\
+                           %(file_name, file_name_full_path, motif, ",".join(map(str,col))))
+          if return_all:
+              return (None,ERROR_FILE_DOES_NOT_EXISTS)
+          else:
+              return None
+      else:
+          if len(exclude_patterns):
+            if type(exclude_patterns)==type('string'):
+                exclude_patterns = [exclude_patterns]
+             
+          
+          file_scanned = open(file_name, "r")
+          for ligne in file_scanned.readlines():
+              if False:
+                  print ligne,motif0
+              if (len(ligne) >= 1):
+                  for pattern in exclude_patterns:
+                      if ligne.find(pattern)>-1:
+                          continue
+                  if (re.search(motif0, ligne)):
+                      trouve = 1
+                      if type_matching == "Columns":
+                          file_scanned.close()
+                          colonnes = str.split(ligne)
+                          col_out = []
+                          for i in col:
+                              col_out.append(colonnes[i])
+                          if len(col_out) == 1:
+                              rep.append(col_out[0])
+                              continue
+                          else:
+                              rep.append(col_out)
+                              continue
+                          break
+                      elif type_matching == "Grep":
+                          file_scanned.close()
+                          rep.append(ligne[:-1])
+                          continue
+                      elif type_matching == "Regexp":
+                          matched = re.search(masque0, ligne, re.VERBOSE)
+                          if matched:
+                              file_scanned.close()
+                              rep.append(matched.groups())
+                              continue
+          file_scanned.close()
+
+          if (trouve == -1):
+              if return_all:
+                  return (None,ERROR_PATTERN_NOT_FOUND)
+              else:
+                  return None
+
+
+      self.log_debug("rep=%s " % pprint.pformat(rep),4)
+      self.log_debug("%s matching results " % len(rep),3)
+      
+      if return_all:
+          return (rep,0)
+      else:
+          return rep
+
+
+  #########################################################################
+  # look for a pattern in a set of files
+  #########################################################################
+
+  def ask(self,msg,default='n',answers = '(y/n)', yes='y', no='n'):
+
+    if self.args.yes:
+        self.log_info('%s --> %s (automated user answer)' % (msg,yes))
+        return
+
+    answers = answers.replace(default,'[%s]' % default)
+    input_var = raw_input(msg + answers + " ")
+
+    self.log_debug('received answer=>%s< default=>%s< no=>%s<' % (input_var,default,no),3)
+
+    if (str(input_var) == str(yes)) or (len(input_var)==0 and default==yes):
+        return
+    else:
+        self.log_info("ABORTING: No clear confirmation... giving up!")
+        sys.exit(1)
+
 
     
+  #########################################################################
+  # apply_tags
+  #########################################################################
+
+  def apply_tags(self, file=False, input=False):
+
+    lines = open(file,'r').readlines()
+    input = "ZZ%ZZ".join(lines)
+    output = input
+    for t in self.tag_value.keys():
+      input = input.replace("__%s__" % t,"%s" % self.tag_value[t])
+    output = ""
+    for l in input.split("ZZ%ZZ"):
+      fields = l.split('___IF___')
+      if len(fields)==2:
+        try:
+          cond = fields[1]
+          if not(eval(cond)):
+            continue
+          l = fields[0]
+          while ((len(l)>0) and (l[-1]=='#' or l[-1]==' ')):
+            l = l[:-1]
+        
+          l = l +'\n'
+        except:
+          self.error('ERROR: could not evaluate %s for template file %s' % (cond,file),
+                     exit=True)
+      fields = l.split('___INCLUDE___')
+      if len(fields)==2:
+        included_file = fields[1][:-1]
+        if not(included_file[0]=='/'):
+          included_file = '%s/%s' % (os.path.dirname(file),included_file)
+        output = output + self.apply_tags(included_file)
+        continue
+      output = output + l
+    return output
+      
+
+      
 if __name__ == "__main__":
   D = application("my_app")

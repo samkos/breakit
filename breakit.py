@@ -110,7 +110,6 @@ class breakit(engine):
     self.parser.add_argument("--taskid", type=int , default=0, help=argparse.SUPPRESS)
     self.parser.add_argument("--array-current-first", type=int , help=argparse.SUPPRESS)
     self.parser.add_argument("--attempt", type=int , default=0, help=argparse.SUPPRESS)
-    self.parser.add_argument("--yes", action="store_true", help=argparse.SUPPRESS)
 
     engine.initialize_parser(self)
     
@@ -478,16 +477,7 @@ class breakit(engine):
     else:
       self.log_info('WARNING!!! I will kill All the tasks running or to be run')
 
-    if self.args.yes:
-      self.log_info('WARNING!!! --> it is ok because of --yes parameter')
-    else:
-      input_var = raw_input("Is this correct ? (yes/no) ")
-      if not(input_var == "yes"):
-        self.log_info("ABORTING: No clear confirmation... giving up!")
-        self.release_lock(lock_file)
-        self.log_debug('lock released')
-        sys.exit(1)
-      
+    self.ask('Is this correct?',default='y')
       
     if len(tasks_to_kill):
       self.log_debug('killing specific tasks : %s' % tasks_to_kill)
