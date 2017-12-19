@@ -749,8 +749,8 @@ class breakit(engine):
     path = os.getenv('BREAKIT_PATH')
     if not(path):
       path = '.'
-    l = "".join(open('%s/run_tests.py' % path,"r").readlines())
-    self.create_template("run_test.py__SEP2__"+l)
+    lines = "".join(open('%s/run_tests.py' % path,"r").readlines())
+    self.create_template("run_test.py__SEP2__"+lines)
 
 
 if __name__ == "__main__":
